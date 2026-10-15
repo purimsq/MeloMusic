@@ -95,6 +95,10 @@ const viteConfig = fs.readFileSync(path.join(projectRoot, 'vite.config.js'), 'ut
 assert(viteConfig.includes("cid: 'melologo'"), 'vite.config.js embeds Melo logo with cid:melologo');
 assert(viteConfig.includes("server.middlewares.use('/api/send-welcome'"), 'vite.config.js has /api/send-welcome endpoint');
 assert(setupLoadingView.includes('authService.sendWelcomeEmail'), 'setupLoadingView dispatches onboarding welcome email');
+assert(viteConfig.includes('Your Selected Artist Foundation'), 'vite.config.js has organized artist foundation section');
+assert(viteConfig.includes('color: #1E7227') && viteConfig.includes('✓'), 'vite.config.js lists selected artists with green checkmark ticks');
+assert(viteConfig.includes('Everything Included With Your Account'), 'vite.config.js provides comprehensive feature breakdown');
+assert(viteConfig.includes('3 Quick Tips to Get Started'), 'vite.config.js includes quick start tips for listeners');
 
 // 8. Password Strength & Email Format Validation
 console.log('\n--- 8. Password Strength & Email Format Validation ---');
