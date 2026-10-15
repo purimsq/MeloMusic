@@ -1,32 +1,26 @@
-// Sample high-fidelity tracks for Melo with universally reliable streams & synced lyrics
-
-export const DEFAULT_FALLBACK_COVER = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600"><rect width="600" height="600" fill="%23222224"/><circle cx="300" cy="300" r="180" fill="none" stroke="%23444446" stroke-width="2"/><path d="M220 300 Q300 180 380 300 T540 300" fill="none" stroke="%2388888E" stroke-width="3" stroke-linecap="round"/><circle cx="300" cy="300" r="28" fill="%23EBEBE9"/><text x="300" y="440" font-family="sans-serif" font-size="28" font-weight="600" fill="%23FFFFFF" text-anchor="middle" letter-spacing="4">MELO</text></svg>`;
+export const DEFAULT_FALLBACK_COVER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNjAwIiB2aWV3Qm94PSIwIDAgNjAwIDYwMCI+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI2MDAiIGZpbGw9IiMyMjIyMjQiLz48Y2lyY2xlIGN4PSIzMDAiIGN5PSIzMDAiIHI9IjE4MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNDQ0NDQ2IiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMjIwIDMwMCBRMzAwIDE4MCAzODAgMzAwIFQ1NDAgMzAwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4ODg4OEUiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PGNpcmNsZSBjeD0iMzAwIiBjeT0iMzAwIiByPSIyOCIgZmlsbD0iI0VCRUJFOURiLz48dGV4dCB4PSIzMDAiIHk9IjQ0MCIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjgiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiNGRkZGRkYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGxldHRlci1zcGFjaW5nPSI0Ij5NRUxPPC90ZXh0Pjwvc3ZnPg==';
 
 export const SAMPLE_TRACKS = [
   {
-    id: 'sample-clash-of-titans',
-    title: 'CLASH OF TITANS',
-    artist: 'KSI Vs Tommy Fury',
-    album: 'Prime Showdown',
-    duration: 220, // 03:40
-    cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=80',
-    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    lyrics: `[00:00.00] Midnight roads and neon sinks
-[00:08.50] City glowing in your eyes
-[00:15.20] Stand in the center of the ring tonight
-[00:23.10] The clash of titans under heavy lights
-[00:31.40] We built this kingdom from the stone and dust
-[00:40.00] No fear, no shadows, in the roar we trust
-[00:48.80] Hear the bell chiming, echoes in the dark
-[00:57.20] Two warriors striking for the final spark
-[01:06.10] Stand in the center of the ring tonight
-[01:14.50] The clash of titans under heavy lights
-[01:23.20] Midnight roads and neon sinks
-[01:31.80] City glowing in your eyes
-[01:40.50] Everything we risked to get this far
-[01:49.00] Shining brighter than the farthest star
-[01:58.20] Two champions rising when the curtain falls
-[02:08.00] Forever written on these stadium walls`
+    id: 'sample-calling-my-phone',
+    title: 'CALLING MY PHONE',
+    artist: 'Lil Tjay feat. 6LACK',
+    album: 'Destined 2 Win',
+    duration: 205, // 03:25
+    cover: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/be/0c/64/be0c6448-b0fc-a1eb-3e33-4456d58d33de/886449049059.jpg/600x600bb.jpg',
+    youtubeId: '9SR_QJvQ74E',
+    lyrics: `[00:00.00] Yeah, yeah, yeah
+[00:06.50] Steady callin' my phone
+[00:11.20] I done told you before that it's over, leave me 'lone
+[00:17.80] Know it's hurtin' you to see me gone
+[00:22.50] Dark clouds, you gon' see the storm
+[00:27.20] I won't answer no more, please stop callin' my phone
+[00:33.40] Could've had all my love, but you treated me wrong
+[00:39.10] Steady callin' my phone
+[00:44.20] I done told you before that it's over, leave me 'lone
+[00:50.50] Know it's hurtin' you to see me gone
+[00:56.20] Can't believe that you would do me wrong
+[01:02.10] Now I'm focused on my bag, I'm in my zone`
   },
   {
     id: 'sample-blinding-lights',
@@ -34,8 +28,8 @@ export const SAMPLE_TRACKS = [
     artist: 'The Weeknd',
     album: 'After Hours',
     duration: 200, // 03:20
-    cover: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=800&q=80',
-    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    cover: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
+    youtubeId: '4NRXx6U8ABQ',
     lyrics: `[00:00.00] Yeah
 [00:12.50] I've been tryna call
 [00:15.80] I've been on my own for long enough
@@ -57,8 +51,8 @@ export const SAMPLE_TRACKS = [
     artist: 'Billie Eilish',
     album: 'HIT ME HARD AND SOFT',
     duration: 196, // 03:16
-    cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?auto=format&fit=crop&w=800&q=80',
-    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    cover: 'https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62',
+    youtubeId: 'V9PVRfjEBTI',
     lyrics: `[00:00.00] I want you to stay
 [00:05.40] 'Til I'm in the grave
 [00:10.20] 'Til I rot away, dead and buried
@@ -78,8 +72,8 @@ export const SAMPLE_TRACKS = [
     artist: 'Lana Del Rey',
     album: 'Did you know that there\'s a tunnel',
     duration: 209, // 03:29
-    cover: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=800&q=80',
-    audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    cover: 'https://i.scdn.co/image/ab67616d0000b27339794cb5c8a419ebfb617e40',
+    youtubeId: 'mETs3f9z6nE',
     lyrics: `[00:00.00] If you dance I'll dance
 [00:08.50] And if you don't I'll dance anyway
 [00:17.20] Give peace a chance

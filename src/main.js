@@ -19,6 +19,9 @@ import { renderLyricsModal } from './ui/lyricsModal.js';
 import { renderAuthModal } from './ui/authModal.js';
 import { renderEqualizerModal } from './ui/equalizerModal.js';
 import { renderQueueModal } from './ui/queueModal.js';
+import { authService } from './services/authService.js';
+import { Storage } from './services/storage.js';
+import { networkService } from './services/networkService.js';
 
 class App {
   constructor() {
@@ -52,13 +55,16 @@ class App {
           <div id="player-container"></div>
         </div>
 
+        <!-- Global Toast Notification Banner -->
+        <div id="global-toast-banner" class="global-toast-banner" style="display: none;"></div>
+
         <!-- Mini-Player Bar (docked above navigation) -->
         <div class="mini-player-bar hidden" id="mini-player-bar">
           <div class="mini-left">
             <img class="mini-thumb" id="mini-thumb" src="${DEFAULT_FALLBACK_COVER}" alt="Track artwork" />
             <div class="mini-info">
-              <span class="mini-title" id="mini-title">CLASH OF TITANS</span>
-              <span class="mini-artist" id="mini-artist">KSI Vs Tommy Fury</span>
+              <span class="mini-title" id="mini-title">CALLING MY PHONE</span>
+              <span class="mini-artist" id="mini-artist">Lil Tjay feat. 6LACK</span>
             </div>
           </div>
           <div class="mini-actions">
@@ -115,8 +121,7 @@ class App {
   initComponents() {
     // 1. Auth Modal
     this.authModal = renderAuthModal(this.authContainer, {
-      onAuthSuccess: () => this.navigateTo('artist-select'),
-      onSkip: () => this.navigateTo('artist-select')
+      onAuthSuccess: () => this.navigateTo('artist-select')
     });
 
     // 2. YouTube Music-style Lyrics Modal
@@ -130,8 +135,8 @@ class App {
       }
     });
 
-    // 3. Equalizer Modal
-    this.equalizerModal = renderEqualizerModal(this.equalizerContainer);
+    // 3. Equalizer Modal with Live Web Audio Engine
+    this.equalizerModal = renderEqualizerModal(this.equalizerContainer, { audioEngine });
 
     // 4. Queue / Up Next Sheet Modal
     this.queueModal = renderQueueModal(this.queueContainer, {
@@ -150,15 +155,13 @@ class App {
       onLogIn: () => {
         history.pushState({ modal: 'auth' }, '');
         this.authModal.open('login');
-      },
-      onSkip: () => this.navigateTo('artist-select')
+      }
     });
 
     // 6. Artist Selection View
     renderArtistSelectView(this.artistSelectContainer, {
       onBack: () => history.back(),
-      onComplete: () => this.startSetupLoading(),
-      onSkip: () => this.startSetupLoading()
+      onComplete: () => this.startSetupLoading()
     });
 
     // 7. Home View (Deep feed)
@@ -168,17 +171,19 @@ class App {
     renderSearchView(this.searchContainer, {
       audioEngine,
       onSelectTrack: (track) => {
-        audioEngine.loadTrack(track, true);
         this.openPlayer();
       }
     });
 
-    // 9. Library View
+    // 9. Library View (Custom Playlists & Device Music)
     renderLibraryView(this.libraryContainer, {
       audioEngine,
       onSelectTrack: (track) => {
         audioEngine.loadTrack(track, true);
         this.openPlayer();
+      },
+      onOpenPlaylist: (playlist) => {
+        this.openPlaylist(playlist);
       }
     });
 
@@ -193,11 +198,35 @@ class App {
       },
       onOpenQueue: () => {
         this.openQueueModal();
+      },
+      onOpenEqualizer: () => {
+        history.pushState({ modal: 'equalizer' }, '');
+        this.equalizerModal.open();
       }
     });
 
-    // Start on Onboarding View
-    this.navigateTo('onboarding', false);
+    // Listen to Firebase Auth state changes
+    authService.subscribe((user, profile) => {
+      if (this.homeContainer && (this.currentView === 'home' || this.currentMainTab === 'home')) {
+        this.initHomeView();
+      }
+    });
+
+    // Monitor Network Connectivity changes globally
+    networkService.subscribe(({ isOnline }) => {
+      if (!isOnline) {
+        this.showToast('📶 You are offline. Downloaded & local tracks remain accessible.', false);
+      }
+    });
+
+    // Spotify-style One-Time Onboarding:
+    // If onboarding was already completed, open straight to Home dashboard!
+    if (Storage.hasCompletedOnboarding()) {
+      this.initHomeView();
+      this.transitionToHome();
+    } else {
+      this.navigateTo('onboarding', false);
+    }
   }
 
   initHomeView() {
@@ -214,7 +243,11 @@ class App {
         history.pushState({ modal: 'equalizer' }, '');
         this.equalizerModal.open();
       },
-      onOpenPlayer: () => this.openPlayer()
+      onOpenPlayer: () => this.openPlayer(),
+      onOpenAuth: () => {
+        history.pushState({ modal: 'auth' }, '');
+        this.authModal.open('signup');
+      }
     });
   }
 
@@ -251,6 +284,8 @@ class App {
 
   closePlaylistView() {
     this.isPlaylistViewOpen = false;
+    document.body.classList.remove('sheet-modal-open');
+    document.querySelector('.device-frame')?.classList.remove('sheet-modal-open');
     if (this.playlistContainer) {
       this.playlistContainer.style.display = 'none';
       this.playlistContainer.innerHTML = '';
@@ -269,10 +304,6 @@ class App {
   startSetupLoading() {
     renderSetupLoadingView(this.setupLoadingContainer, {
       onComplete: () => {
-        this.initHomeView();
-        this.transitionToHome();
-      },
-      onSkip: () => {
         this.initHomeView();
         this.transitionToHome();
       }
@@ -342,6 +373,13 @@ class App {
   }
 
   initGlobalEvents() {
+    // Global Toast Notification Listener
+    window.addEventListener('melo-toast', (e) => {
+      if (e.detail) {
+        this.showToast(e.detail.message, e.detail.isSuccess !== false);
+      }
+    });
+
     // Bottom Nav Tabs
     this.bottomNav.querySelectorAll('.nav-tab-item').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -383,6 +421,16 @@ class App {
 
     audioEngine.subscribe('playStateChange', ({ isPlaying }) => {
       miniPlayPause.innerHTML = isPlaying ? Icons.pause(18) : Icons.play(18);
+    });
+
+    audioEngine.subscribe('loadingChange', ({ isLoading }) => {
+      if (isLoading) {
+        miniPlayPause.innerHTML = `<div class="melo-mini-spinner"></div>`;
+        miniArtist.textContent = 'Buffering studio stream...';
+      } else {
+        miniPlayPause.innerHTML = audioEngine.isPlaying ? Icons.pause(18) : Icons.play(18);
+        miniArtist.textContent = audioEngine.currentTrack?.artist || '';
+      }
     });
   }
 
@@ -649,6 +697,29 @@ class App {
       }
     }
   }
+
+  showToast(message, isSuccess = true) {
+    const banner = document.querySelector('#global-toast-banner');
+    if (!banner) return;
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    banner.textContent = message;
+    banner.style.background = isSuccess ? '#2E7D32' : '#D32F2F';
+    banner.style.display = 'block';
+    this.toastTimer = setTimeout(() => {
+      banner.style.display = 'none';
+    }, 3400);
+  }
+}
+
+// Register Service Worker for PWA Offline Functionality
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(() => {
+      console.log('Melo PWA Service Worker active');
+    }).catch(err => {
+      console.warn('PWA Service Worker note:', err);
+    });
+  });
 }
 
 // Initialize Application

@@ -9,10 +9,14 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "sharp": "^0.35.5",
     "vite": "^8.3.0"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
+    "firebase": "^13.0.0",
     "idb-keyval": "^6.3.0",
-    "lucide": "^1.57.0"
+    "lucide": "^1.57.0",
+    "nodemailer": "^10.1.1"
   }
 }

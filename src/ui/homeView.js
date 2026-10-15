@@ -1,75 +1,97 @@
-// View 4: Comprehensive Deep Home Music Feed & Profile
+// View 4: Comprehensive Deep Home Music Feed & Dynamic Profile
 import { Icons } from './icons.js';
 import { Storage } from '../services/storage.js';
 import { SAMPLE_TRACKS, DEFAULT_FALLBACK_COVER } from '../data/samples.js';
 import { ARTISTS } from '../data/artists.js';
 import { generateCuratedMixes } from '../data/mixGenerator.js';
+import { networkService } from '../services/networkService.js';
+import { authService } from '../services/authService.js';
 
-export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPlaylist, onOpenEqualizer, onOpenPlayer }) {
-  const userProfile = Storage.getUserProfile() || { name: 'Friend' };
-  const favoriteArtistIds = Storage.getFavoriteArtists();
-  const likedSongs = Storage.getLikedSongs();
+export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPlaylist, onOpenEqualizer, onOpenPlayer, onOpenAuth }) {
+  let userProfile = Storage.getUserProfile() || { name: 'Music Lover', email: 'guest@melomusic.app' };
+  let favoriteArtistIds = Storage.getFavoriteArtists();
+  let likedSongs = Storage.getLikedSongs();
+  let isOnline = networkService.isOnline;
+  let isCheckingNetwork = false;
+  let toastTimeout = null;
 
-  // Curate 5 rich mixes, each guaranteed to have 25-30 songs
-  const curatedMixes = generateCuratedMixes(favoriteArtistIds);
+  // Curate 5 rich mixes, each guaranteed to have 25-30 songs based on user preferences
+  let curatedMixes = generateCuratedMixes(favoriteArtistIds);
 
   // Find user's selected artists (fallback to top 4)
-  const userArtists = ARTISTS.filter(a => favoriteArtistIds.includes(a.id));
-  const primaryArtist = userArtists.length > 0 ? userArtists[0] : ARTISTS[1]; // Billie or Drake
-  
-  let isOffline = !navigator.onLine;
+  let userArtists = ARTISTS.filter(a => favoriteArtistIds.includes(a.id));
+  let primaryArtist = userArtists.length > 0 ? userArtists[0] : ARTISTS[1];
 
-  // Build extended tracks database from artists
-  const extendedArtistTracks = [];
-  userArtists.forEach(artist => {
-    artist.topSongs.forEach((song, idx) => {
-      extendedArtistTracks.push({
-        id: `fav-track-${artist.id}-${idx}`,
-        title: song.toUpperCase(),
-        artist: artist.name,
-        album: `${artist.name} Collection`,
-        duration: 190 + (idx * 15),
-        cover: artist.photo,
-        audioUrl: SAMPLE_TRACKS[idx % SAMPLE_TRACKS.length].audioUrl
+  // Extended track catalog
+  function buildCatalog() {
+    const extendedArtistTracks = [];
+    userArtists.forEach(artist => {
+      artist.topSongs.forEach((song, idx) => {
+        extendedArtistTracks.push({
+          id: `fav-track-${artist.id}-${idx}`,
+          title: song.toUpperCase(),
+          artist: artist.name,
+          album: `${artist.name} Collection`,
+          duration: 190 + (idx * 15),
+          cover: artist.photo,
+          needsResolution: true
+        });
       });
     });
-  });
+    return [...SAMPLE_TRACKS, ...extendedArtistTracks];
+  }
 
-  const fullTrackCatalog = [...SAMPLE_TRACKS, ...extendedArtistTracks];
+  let fullTrackCatalog = buildCatalog();
+
+  function getGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning,';
+    if (hour < 18) return 'Good afternoon,';
+    return 'Good evening,';
+  }
 
   function buildHtml() {
+    const greeting = getGreeting();
+    const initials = (userProfile.name || 'M')[0].toUpperCase();
+    const isLoggedIn = !!(userProfile.isLoggedIn || authService.currentUser);
+
     return `
       <div class="view view-home" id="view-home">
-        <!-- Top Bar -->
+        <!-- Live Toast Notification (Network / Status) -->
+        <div id="home-toast-banner" class="home-toast-banner" style="display: none;"></div>
+
+        <!-- Top Bar with Dynamic User Profile & Live Internet Status -->
         <div class="home-top-bar">
-          <div class="home-user-pill">
+          <div class="home-user-pill" id="btn-open-user-profile" title="Open Your Profile & Audio Universe" style="cursor: pointer;">
             <div class="user-avatar-circle">
-              ${(userProfile.name || 'M')[0].toUpperCase()}
+              ${userProfile.photoURL ? `<img src="${userProfile.photoURL}" alt="${userProfile.name}" class="user-avatar-img" />` : initials}
             </div>
             <div>
-              <span class="user-greeting">Welcome back,</span>
+              <span class="user-greeting">${greeting}</span>
               <h3 class="user-name">${userProfile.name || 'Music Lover'}</h3>
             </div>
           </div>
 
           <div class="home-top-actions">
-            <!-- Offline Simulation / Status Toggle -->
-            <button class="btn-circle-nav" id="btn-toggle-network" title="Toggle Offline Simulation">
-              ${isOffline ? Icons.wifiOff(18) : `<span style="width: 8px; height: 8px; border-radius: 50%; background: #4CAF50;"></span>`}
+            <!-- Active Internet Connectivity Indicator -->
+            <button class="btn-circle-nav ${isOnline ? 'online-pulse' : 'offline-status'}" id="btn-toggle-network" 
+                    title="${isOnline ? 'Active Internet Verified (HTTP 204 ping OK)' : 'Offline Mode (Local Storage)'}">
+              ${isOnline ? `<span class="network-dot-live"></span>` : Icons.wifiOff(18)}
             </button>
-            <!-- Equalizer & Sound Studio button -->
+
+            <!-- 5-Band Equalizer & Sound Studio button -->
             <button class="btn-circle-nav" id="btn-home-equalizer" title="Equalizer & Sound Studio">
               ${Icons.sliders(18)}
             </button>
           </div>
         </div>
 
-        <!-- Offline Banner (Shows only when offline) -->
-        ${isOffline ? `
+        <!-- Offline Banner (Shows only when real ping fails) -->
+        ${!isOnline ? `
           <div class="offline-banner" id="offline-banner">
             <div>
               <span class="offline-pill-tag">OFFLINE MODE</span>
-              <p style="margin-top: 4px; font-size: 13px;">Playing directly from your Local Vault</p>
+              <p style="margin-top: 4px; font-size: 13px;">Playing directly from your Offline Local Vault</p>
             </div>
             ${Icons.wifiOff(20)}
           </div>
@@ -82,12 +104,12 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
           </div>
         </div>
 
-        <!-- 2. Made For You (Artist Mixes Carousel) -->
+        <!-- 2. Made For You (Artist Mixes Carousel - 25 to 30 songs each) -->
         <div>
           <div class="home-section-header">
             <div>
-              <h3 class="section-title">${isOffline ? 'Offline Essentials' : 'Made For You'}</h3>
-              <p class="section-subtitle">Personalized mixes based on your taste</p>
+              <h3 class="section-title">${!isOnline ? 'Offline Essentials' : 'Made For You'}</h3>
+              <p class="section-subtitle">25-30 tracks tuned to your selected artists</p>
             </div>
             <span class="section-badge">Daily Mix</span>
           </div>
@@ -101,7 +123,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
         <div>
           <div class="home-section-header">
             <div>
-              <h3 class="section-title">${isOffline ? 'Available Offline' : 'Heavy Rotation'}</h3>
+              <h3 class="section-title">${!isOnline ? 'Available Offline' : 'Heavy Rotation'}</h3>
               <p class="section-subtitle">Tracks on repeat around the world</p>
             </div>
             <span class="section-badge">Popular</span>
@@ -178,22 +200,22 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
               <h3 class="profile-stat-title">Your Audio Universe</h3>
             </div>
             <div class="profile-avatar-chip">
-              ${(userProfile.name || 'M')[0].toUpperCase()}
+              ${initials}
             </div>
           </div>
 
           <div class="profile-metrics-row">
             <div class="metric-item">
-              <span class="metric-value">${userArtists.length || 7}</span>
+              <span class="metric-value">${userArtists.length || 6}</span>
               <span class="metric-label">Key Artists</span>
             </div>
             <div class="metric-item">
-              <span class="metric-value">320k</span>
-              <span class="metric-label">Lossless Hi-Fi</span>
+              <span class="metric-value">${Storage.getLikedSongs().length}</span>
+              <span class="metric-label">Liked Songs</span>
             </div>
             <div class="metric-item">
-              <span class="metric-value">100%</span>
-              <span class="metric-label">Ad-Free Stream</span>
+              <span class="metric-value">${Storage.getPlaylists().length}</span>
+              <span class="metric-label">Playlists</span>
             </div>
           </div>
 
@@ -201,31 +223,192 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
             Your taste blends <strong>${primaryArtist.name}</strong>, <strong>${primaryArtist.genre}</strong>, and nocturnal atmospheric beats.
           </p>
         </div>
+
+        <!-- Interactive User Profile Modal Sheet -->
+        <div class="profile-modal-sheet" id="home-profile-sheet">
+          <div class="profile-modal-card">
+            <div class="auth-modal-header">
+              <div>
+                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); font-weight: 700;">Account & Sound Profile</span>
+                <h3 class="auth-modal-title">User Profile</h3>
+              </div>
+              <button class="btn-circle-nav" id="btn-close-profile-modal" title="Close">
+                ${Icons.close(18)}
+              </button>
+            </div>
+
+            <!-- Profile Hero Details -->
+            <div style="display: flex; align-items: center; gap: 16px; background: var(--bg-surface); padding: 16px; border-radius: 20px; border: 1px solid var(--border-subtle);">
+              <div class="user-avatar-circle" style="width: 56px; height: 56px; font-size: 20px; flex-shrink: 0;">
+                ${userProfile.photoURL ? `<img src="${userProfile.photoURL}" alt="${userProfile.name}" class="user-avatar-img" />` : initials}
+              </div>
+              <div style="display: flex; flex-direction: column; overflow: hidden;">
+                <h4 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.name || 'Music Lover'}</h4>
+                <span style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.email || 'Testing Session'}</span>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;">
+                  <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #2E7D32; background: rgba(46, 125, 50, 0.1); padding: 2px 8px; border-radius: 8px;">
+                    ${Icons.check(12)} ${isLoggedIn ? 'Firebase Cloud Account' : 'Testing Mode Active'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Profile Stats Grid -->
+            <div class="profile-metrics-row" style="background: var(--bg-surface); border-radius: 18px; padding: 12px; margin: 0; border: 1px solid var(--border-subtle);">
+              <div class="metric-item">
+                <span class="metric-value">${userArtists.length || 6}</span>
+                <span class="metric-label">Artists</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value">${Storage.getLikedSongs().length}</span>
+                <span class="metric-label">Liked & Saved</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-value">${Storage.getPlaylists().length}</span>
+                <span class="metric-label">Playlists</span>
+              </div>
+            </div>
+
+            <!-- Profile Actions -->
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px;">
+              ${isLoggedIn ? `
+                <button class="btn-black-pill" id="btn-profile-logout" style="background: #E53935; color: #FFF;">
+                  Log Out from Melo
+                </button>
+              ` : `
+                <button class="btn-black-pill" id="btn-profile-signin">
+                  Sign In or Create Account
+                </button>
+              `}
+              <button class="login-text-link" id="btn-profile-manage-eq" style="align-self: center; margin-top: 4px;">
+                Open Equalizer Studio
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
+  }
+
+  function showToast(message, isSuccess = true) {
+    const toast = container.querySelector('#home-toast-banner');
+    if (!toast) return;
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toast.textContent = message;
+    toast.style.display = 'block';
+    toast.style.background = isSuccess ? '#2E7D32' : '#D32F2F';
+    toastTimeout = setTimeout(() => {
+      toast.style.display = 'none';
+    }, 3200);
   }
 
   container.innerHTML = buildHtml();
   attachEvents();
 
+  // Subscribe to real network status changes
+  const unsubscribeNetwork = networkService.subscribe(({ isOnline: netOnline }) => {
+    if (isOnline !== netOnline) {
+      isOnline = netOnline;
+      const netBtn = container.querySelector('#btn-toggle-network');
+      if (netBtn) {
+        netBtn.className = `btn-circle-nav ${isOnline ? 'online-pulse' : 'offline-status'}`;
+        netBtn.innerHTML = isOnline ? `<span class="network-dot-live"></span>` : Icons.wifiOff(18);
+        netBtn.title = isOnline ? 'Active Internet Verified (HTTP 204 ping OK)' : 'Offline Mode (Local Storage)';
+      }
+      const banner = container.querySelector('#offline-banner');
+      if (banner) {
+        banner.style.display = isOnline ? 'none' : 'flex';
+      }
+    }
+  });
+
+  // Subscribe to Firebase Auth / Profile updates
+  const unsubscribeAuth = authService.subscribe((user, profile) => {
+    if (profile) {
+      userProfile = profile;
+      const nameEl = container.querySelector('.user-name');
+      if (nameEl) nameEl.textContent = profile.name || 'Music Lover';
+      const avatarCircle = container.querySelector('.user-avatar-circle');
+      if (avatarCircle) {
+        avatarCircle.innerHTML = profile.photoURL
+          ? `<img src="${profile.photoURL}" alt="${profile.name}" class="user-avatar-img" />`
+          : (profile.name || 'M')[0].toUpperCase();
+      }
+    }
+  });
+
   function attachEvents() {
-    // Network toggle simulation
+    // 1. Profile Pill Click -> Open Profile Sheet
+    const userPill = container.querySelector('#btn-open-user-profile');
+    const profileSheet = container.querySelector('#home-profile-sheet');
+    const closeProfileBtn = container.querySelector('#btn-close-profile-modal');
+
+    userPill?.addEventListener('click', () => {
+      profileSheet?.classList.add('open');
+    });
+
+    closeProfileBtn?.addEventListener('click', () => {
+      profileSheet?.classList.remove('open');
+    });
+
+    profileSheet?.addEventListener('click', (e) => {
+      if (e.target === profileSheet) {
+        profileSheet.classList.remove('open');
+      }
+    });
+
+    // Logout
+    container.querySelector('#btn-profile-logout')?.addEventListener('click', async () => {
+      await authService.logOut();
+      profileSheet?.classList.remove('open');
+      showToast('Logged out successfully', true);
+      userProfile = Storage.getUserProfile();
+      container.innerHTML = buildHtml();
+      attachEvents();
+    });
+
+    // Sign in trigger
+    container.querySelector('#btn-profile-signin')?.addEventListener('click', () => {
+      profileSheet?.classList.remove('open');
+      if (onOpenAuth) onOpenAuth();
+    });
+
+    // Equalizer from profile
+    container.querySelector('#btn-profile-manage-eq')?.addEventListener('click', () => {
+      profileSheet?.classList.remove('open');
+      if (onOpenEqualizer) onOpenEqualizer();
+    });
+
+    // 2. Network Button Click -> Active Ping Verification
     const netToggle = container.querySelector('#btn-toggle-network');
     if (netToggle) {
-      netToggle.addEventListener('click', () => {
-        isOffline = !isOffline;
+      netToggle.addEventListener('click', async () => {
+        if (isCheckingNetwork) return;
+        isCheckingNetwork = true;
+        showToast('Testing internet throughput ping...', true);
+
+        const online = await networkService.verifyConnection();
+        isCheckingNetwork = false;
+        isOnline = online;
+
+        if (online) {
+          showToast('Active Internet Verified: High-speed streaming online', true);
+        } else {
+          showToast('No Internet Detected: Seamlessly running on offline vault', false);
+        }
+
         container.innerHTML = buildHtml();
         attachEvents();
       });
     }
 
-    // Equalizer trigger
+    // 3. Equalizer trigger
     const eqBtn = container.querySelector('#btn-home-equalizer');
     if (eqBtn) {
       eqBtn.addEventListener('click', onOpenEqualizer);
     }
 
-    // Quick Play tile clicks
+    // 4. Quick Play tile clicks
     container.querySelectorAll('.quick-play-tile').forEach(tile => {
       tile.addEventListener('click', () => {
         const trackId = tile.dataset.id;
@@ -234,7 +417,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       });
     });
 
-    // 1. Curated Mix Card clicks -> Open Playlist View (25-30 songs)
+    // 5. Curated Mix Card clicks -> Open Playlist View (25-30 songs)
     container.querySelectorAll('.mix-card-item').forEach(card => {
       card.addEventListener('click', (e) => {
         const mixId = card.dataset.mixId;
@@ -257,7 +440,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       });
     });
 
-    // 2. Individual Scalloped track cards (Spotlight etc.)
+    // 6. Individual Scalloped track cards
     container.querySelectorAll('.music-card-scalloped:not(.mix-card-item)').forEach(card => {
       card.addEventListener('click', () => {
         const trackId = card.dataset.id;
@@ -266,7 +449,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       });
     });
 
-    // 3. Track row clicks
+    // 7. Track row clicks
     container.querySelectorAll('.track-row-item').forEach(row => {
       row.addEventListener('click', () => {
         const trackId = row.dataset.id;
@@ -275,7 +458,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       });
     });
 
-    // 4. Mood card clicks -> Open matching curated 25-30 track mix!
+    // 8. Mood card clicks -> Open matching curated 25-30 track mix!
     container.querySelectorAll('.mood-card').forEach(mood => {
       mood.addEventListener('click', () => {
         const genre = mood.dataset.genre;
@@ -283,7 +466,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
         if (genre === 'Chill') targetMix = curatedMixes.find(m => m.id === 'mix-nocturnal') || curatedMixes[1];
         else if (genre === 'Energy') targetMix = curatedMixes.find(m => m.id === 'mix-energy') || curatedMixes[2];
         else if (genre === 'Dream' || genre === 'Lofi') targetMix = curatedMixes.find(m => m.id === 'mix-pop') || curatedMixes[3];
-        
+
         if (onOpenPlaylist) {
           onOpenPlaylist(targetMix);
         } else {
@@ -293,17 +476,6 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       });
     });
   }
-
-  window.addEventListener('online', () => {
-    isOffline = false;
-    container.innerHTML = buildHtml();
-    attachEvents();
-  });
-  window.addEventListener('offline', () => {
-    isOffline = true;
-    container.innerHTML = buildHtml();
-    attachEvents();
-  });
 }
 
 function renderQuickPlayTiles(tracks) {
@@ -334,17 +506,17 @@ function renderMixCards(mixes) {
   `).join('');
 }
 
-function renderScallopedCards(tracks) {
-  return tracks.map(t => `
-    <div class="music-card-scalloped" data-id="${t.id}">
+function renderArtistSpotlightRow(artist) {
+  return artist.topSongs.map((songTitle, idx) => `
+    <div class="music-card-scalloped" data-id="fav-track-${artist.id}-${idx}">
       <div class="card-scallop-thumb">
-        <img src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" loading="lazy" />
+        <img src="${artist.photo || DEFAULT_FALLBACK_COVER}" alt="${songTitle}" loading="lazy" />
         <button class="card-play-overlay-btn">
           ${Icons.play(18)}
         </button>
       </div>
-      <span class="card-title">${t.title}</span>
-      <span class="card-subtitle">${t.artist}</span>
+      <span class="card-title">${songTitle}</span>
+      <span class="card-subtitle">${artist.name}</span>
     </div>
   `).join('');
 }
@@ -377,11 +549,12 @@ function renderTrackRows(tracks, audioEngine) {
 function renderRankedTrackList(tracks, audioEngine) {
   const currentId = audioEngine.currentTrack?.id;
   return tracks.map((t, idx) => {
+    const rank = (idx + 1).toString().padStart(2, '0');
     const isPlayingThis = currentId === t.id && audioEngine.isPlaying;
     return `
-      <div class="track-row-item ranked-row ${currentId === t.id ? 'playing' : ''}" data-id="${t.id}">
+      <div class="track-row-item ${currentId === t.id ? 'playing' : ''}" data-id="${t.id}">
         <div class="track-row-left">
-          <span class="rank-number-label">${(idx + 1).toString().padStart(2, '0')}</span>
+          <span class="ranked-index">${rank}</span>
           <img class="track-row-thumb" src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" loading="lazy" />
           <div class="track-row-info">
             <span class="track-row-title">${t.title}</span>
@@ -400,23 +573,8 @@ function renderRankedTrackList(tracks, audioEngine) {
   }).join('');
 }
 
-function renderArtistSpotlightRow(artist) {
-  return artist.topSongs.map((song, i) => `
-    <div class="music-card-scalloped" data-id="spotlight-${artist.id}-${i}">
-      <div class="card-scallop-thumb">
-        <img src="${artist.photo}" alt="${song}" loading="lazy" />
-        <button class="card-play-overlay-btn">
-          ${Icons.play(18)}
-        </button>
-      </div>
-      <span class="card-title">${song.toUpperCase()}</span>
-      <span class="card-subtitle">${artist.name}</span>
-    </div>
-  `).join('');
-}
-
 function formatTime(sec) {
-  if (isNaN(sec) || sec < 0) return '03:30';
+  if (isNaN(sec) || sec <= 0) return '03:20';
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;

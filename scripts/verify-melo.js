@@ -1,0 +1,105 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
+
+let passedTests = 0;
+let totalTests = 0;
+
+function assert(condition, message) {
+  totalTests++;
+  if (condition) {
+    console.log(`  ✓ PASS: ${message}`);
+    passedTests++;
+  } else {
+    console.error(`  ✗ FAIL: ${message}`);
+  }
+}
+
+console.log('\n=== RUNNING MELO VERIFICATION SUITE ===\n');
+
+// 1. Check Icon Assets
+console.log('--- 1. App Icon and Favicon Assets ---');
+const expectedIcons = [
+  'public/favicon.ico',
+  'public/favicon.png',
+  'public/icons/icon-192.png',
+  'public/icons/icon-512.png',
+  'public/icons/logo.png',
+  'public/icons/logo-badge.png',
+  'src/assets/logo.png',
+  'src/assets/logo-badge.png'
+];
+
+for (const iconPath of expectedIcons) {
+  const fullPath = path.join(projectRoot, iconPath);
+  const exists = fs.existsSync(fullPath);
+  const size = exists ? fs.statSync(fullPath).size : 0;
+  assert(exists && size > 500, `Asset exists with valid size: ${iconPath} (${size} bytes)`);
+}
+
+// 2. Check index.html & manifest.json
+console.log('\n--- 2. HTML and PWA Manifest Links ---');
+const indexHtml = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
+assert(indexHtml.includes('href="/favicon.png"'), 'index.html links to /favicon.png');
+assert(indexHtml.includes('href="/favicon.ico"'), 'index.html links to /favicon.ico');
+assert(indexHtml.includes('href="/icons/icon-192.png"'), 'index.html links to apple-touch-icon');
+
+const manifest = JSON.parse(fs.readFileSync(path.join(projectRoot, 'public/manifest.json'), 'utf8'));
+assert(manifest.icons.some(i => i.src === '/icons/icon-192.png'), 'manifest.json contains icon-192');
+assert(manifest.icons.some(i => i.src === '/icons/icon-512.png'), 'manifest.json contains icon-512');
+
+// 3. Skip Buttons Removal
+console.log('\n--- 3. Verify Removal of Skip Buttons ---');
+const onboardingView = fs.readFileSync(path.join(projectRoot, 'src/ui/onboardingView.js'), 'utf8');
+assert(!onboardingView.includes('btn-onboarding-skip') && !onboardingView.includes('>Skip<'), 'onboardingView has no skip button');
+
+const authModal = fs.readFileSync(path.join(projectRoot, 'src/ui/authModal.js'), 'utf8');
+assert(!authModal.includes('btn-auth-skip'), 'authModal has no skip button');
+
+const artistSelectView = fs.readFileSync(path.join(projectRoot, 'src/ui/artistSelectView.js'), 'utf8');
+assert(!artistSelectView.includes('btn-artist-skip') && !artistSelectView.includes('>Skip<'), 'artistSelectView has no skip button');
+
+const setupLoadingView = fs.readFileSync(path.join(projectRoot, 'src/ui/setupLoadingView.js'), 'utf8');
+assert(!setupLoadingView.includes('btn-skip-setup') && !setupLoadingView.includes('>Skip<'), 'setupLoadingView has no skip button');
+
+// 4. Mandatory Artist Selection
+console.log('\n--- 4. Mandatory Artist Selection (At least 3) ---');
+assert(artistSelectView.includes('const MIN_ARTISTS = 3'), 'artistSelectView enforces MIN_ARTISTS = 3');
+assert(artistSelectView.includes('id="selection-counter"'), 'artistSelectView provides dynamic selection counter pill');
+assert(artistSelectView.includes('btnContinue.disabled = !isReady'), 'artistSelectView disables continue button until >= 3 selected');
+
+// 5. WiFi / Network Guard on Auth
+console.log('\n--- 5. WiFi / Network Guard on Sign Up and Login ---');
+const authService = fs.readFileSync(path.join(projectRoot, 'src/services/authService.js'), 'utf8');
+assert(authService.includes('!networkService.isOnline && !navigator.onLine'), 'authService verifies online connection before OTP / account creation');
+assert(onboardingView.includes('!networkService.isOnline && !navigator.onLine'), 'onboardingView verifies online connection before open');
+assert(authModal.includes('!networkService.isOnline && !navigator.onLine'), 'authModal checks online connection before auth actions');
+
+// 6. One-Time Spotify-style Onboarding
+console.log('\n--- 6. One-Time Spotify-Style Onboarding ---');
+const storage = fs.readFileSync(path.join(projectRoot, 'src/services/storage.js'), 'utf8');
+assert(storage.includes('hasCompletedOnboarding'), 'storage.js has hasCompletedOnboarding method');
+assert(storage.includes('setCompletedOnboarding'), 'storage.js has setCompletedOnboarding method');
+
+const mainJs = fs.readFileSync(path.join(projectRoot, 'src/main.js'), 'utf8');
+assert(mainJs.includes('if (Storage.hasCompletedOnboarding())'), 'main.js routes directly to home if onboarding already completed');
+assert(setupLoadingView.includes('Storage.setCompletedOnboarding(true)'), 'setupLoadingView marks onboarding as completed');
+
+// 7. Email Branding & Onboarding Email
+console.log('\n--- 7. Email Branding & Onboarding Welcome Email ---');
+const viteConfig = fs.readFileSync(path.join(projectRoot, 'vite.config.js'), 'utf8');
+assert(viteConfig.includes("cid: 'melologo'"), 'vite.config.js embeds Melo logo with cid:melologo');
+assert(viteConfig.includes("server.middlewares.use('/api/send-welcome'"), 'vite.config.js has /api/send-welcome endpoint');
+assert(setupLoadingView.includes('authService.sendWelcomeEmail'), 'setupLoadingView dispatches onboarding welcome email');
+
+console.log(`\n==========================================`);
+console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
+console.log(`==========================================\n`);
+
+if (passedTests !== totalTests) {
+  process.exit(1);
+}

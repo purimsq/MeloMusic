@@ -128,12 +128,8 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
     });
 
     clearBtn?.addEventListener('click', () => {
-      if (audioEngine.queue.length > 1) {
-        audioEngine.queue = [audioEngine.currentTrack];
-        audioEngine.queueIndex = 0;
-        audioEngine.notify('queueChange', { queue: audioEngine.queue });
-        update();
-      }
+      audioEngine.clearQueue();
+      update();
     });
 
     container.querySelectorAll('.queue-track-row:not(.now-playing)').forEach(row => {
@@ -141,8 +137,9 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
         if (e.target.closest('.btn-queue-remove')) return;
         const index = parseInt(row.dataset.index, 10);
         if (!isNaN(index) && audioEngine.queue[index]) {
-          audioEngine.playTrackAtIndex(index);
+          audioEngine.playTrackAtIndex(index, true);
           update();
+          if (onSelectTrack) onSelectTrack(audioEngine.queue[index]);
         }
       });
     });
@@ -151,9 +148,8 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const removeIdx = parseInt(btn.dataset.removeIndex, 10);
-        if (!isNaN(removeIdx) && audioEngine.queue[removeIdx]) {
-          audioEngine.queue.splice(removeIdx, 1);
-          audioEngine.notify('queueChange', { queue: audioEngine.queue });
+        if (!isNaN(removeIdx)) {
+          audioEngine.removeFromQueue(removeIdx);
           update();
         }
       });

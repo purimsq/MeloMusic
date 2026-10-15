@@ -1,8 +1,9 @@
 // View: Setting Up Personalized Music Universe Loading Screen
 import { ARTISTS } from '../data/artists.js';
 import { Storage } from '../services/storage.js';
+import { authService } from '../services/authService.js';
 
-export function renderSetupLoadingView(container, { onComplete, onSkip }) {
+export function renderSetupLoadingView(container, { onComplete }) {
   const favoriteArtistIds = Storage.getFavoriteArtists();
   // Get top 6-7 selected artists (fallback to top world artists if none)
   let selectedArtists = ARTISTS.filter(a => favoriteArtistIds.includes(a.id));
@@ -45,10 +46,16 @@ export function renderSetupLoadingView(container, { onComplete, onSkip }) {
         </div>
       </div>
 
-      <!-- Top Skip Button -->
+      <!-- Top Brand Status Bar -->
       <div class="setup-top-bar">
-        <span class="setup-badge">AI Taste Curator</span>
-        <button class="btn-skip" id="btn-skip-setup" title="Skip setup">Skip</button>
+        <div class="setup-brand-pill" style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.05); padding: 6px 14px; border-radius: 20px;">
+          <img src="/icons/logo-badge.png" alt="Melo" style="width: 18px; height: 18px; object-fit: contain;" />
+          <span style="font-size: 11px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-secondary);">Curator AI</span>
+        </div>
+        <div class="setup-live-pill" style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #1E7227; background: rgba(30, 114, 39, 0.08); padding: 5px 12px; border-radius: 14px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #1E7227; animation: pulseGlow 1.5s infinite;"></span>
+          Curating
+        </div>
       </div>
 
       <!-- Full-Screen Floating Universe Stage (Icons floating all across the screen) -->
@@ -108,7 +115,6 @@ export function renderSetupLoadingView(container, { onComplete, onSkip }) {
   const linearFill = container.querySelector('#setup-linear-fill');
   const titleDisplay = container.querySelector('#setup-status-title');
   const subDisplay = container.querySelector('#setup-status-sub');
-  const skipBtn = container.querySelector('#btn-skip-setup');
 
   const circumference = 2 * Math.PI * 50; // ~314.16
   circleProgress.style.strokeDasharray = circumference;
@@ -125,8 +131,8 @@ export function renderSetupLoadingView(container, { onComplete, onSkip }) {
   let currentPercent = 0;
   let isDone = false;
 
-  const durationMs = 45000; // ~45s simulation as requested, or skip
-  const intervalMs = 120;
+  const durationMs = 9000; // 9s refined setup experience
+  const intervalMs = 100;
   const step = (100 / (durationMs / intervalMs));
 
   const timer = setInterval(() => {
@@ -159,45 +165,41 @@ export function renderSetupLoadingView(container, { onComplete, onSkip }) {
     isDone = true;
     clearInterval(timer);
 
-    // 1. Fade away top skip button
-    skipBtn.classList.add('fade-out');
+    // Save one-time onboarding completion (Spotify-style)
+    Storage.setCompletedOnboarding(true);
 
-    // 2. Fade away all floating artist profiles with elegant staggered delay
-    // Note: Ambient clouds in background (.ambient-clouds-layer) remain untouched and floating!
+    // Send onboarding welcome email with Melo logo & curated artists
+    const artistNames = selectedArtists.map(a => a.name);
+    authService.sendWelcomeEmail(artistNames);
+
+    // 1. Fade away all floating artist profiles with elegant staggered delay
     const artistEls = container.querySelectorAll('.setup-floating-artist');
     artistEls.forEach((el, idx) => {
       el.style.transitionDelay = `${idx * 45}ms`;
       el.classList.add('fade-away');
     });
 
-    // 3. Fade out the circular percentage pulse loader
+    // 2. Fade out the circular percentage pulse loader
     const centerPulse = container.querySelector('.setup-center-pulse');
     if (centerPulse) {
       centerPulse.classList.add('fade-out');
     }
 
-    // 4. Reveal green tick checkmark badge with "Profile all set up"
+    // 3. Reveal green tick checkmark badge with "Profile all set up"
     const successCard = container.querySelector('#setup-success-card');
     if (successCard) {
       successCard.classList.add('show');
     }
 
-    // 5. Update bottom status headline & fill progress bar with emerald green
+    // 4. Update bottom status headline & fill progress bar with emerald green
     titleDisplay.textContent = 'Profile All Set Up';
     subDisplay.textContent = 'Welcome to Melo! Opening your music sanctuary...';
     linearFill.style.background = '#1E7227';
     linearFill.style.width = '100%';
 
-    // 6. Smooth pause so user sees the checkmark, then open the dashboard!
+    // 5. Smooth pause so user sees the checkmark, then open the dashboard!
     setTimeout(() => {
-      onComplete();
+      if (onComplete) onComplete();
     }, 1800);
   }
-
-  skipBtn.addEventListener('click', () => {
-    currentPercent = 100;
-    percentDisplay.textContent = '100%';
-    circleProgress.style.strokeDashoffset = 0;
-    triggerSuccessSequence();
-  });
 }

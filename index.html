@@ -6,8 +6,12 @@
     <meta name="theme-color" content="#EBEBE9" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Melo" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.json" />
     <title>melo — Elevate Every Moment With Music</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23111'/%3E%3Ctext x='50' y='64' font-size='42' font-family='sans-serif' font-weight='bold' fill='%23fff' text-anchor='middle'%3Em%3C/text%3E%3C/svg%3E" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -27,9 +31,13 @@
       </defs>
     </svg>
 
+    <!-- Hidden Background YouTube Audio Player Container for Ad-Free Master Streaming -->
+    <div id="melo-yt-container" style="position: fixed; width: 1px; height: 1px; opacity: 0.001; pointer-events: none; left: -100px; bottom: -100px; z-index: -999;"></div>
+
     <!-- App Root -->
     <div id="app"></div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

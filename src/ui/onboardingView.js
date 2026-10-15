@@ -1,5 +1,7 @@
 // View 1: Onboarding Screen with 4 floating profiles, visible clouds & bespoke melo. logo
-export function renderOnboardingView(container, { onSignUp, onLogIn, onSkip }) {
+import { networkService } from '../services/networkService.js';
+
+export function renderOnboardingView(container, { onSignUp, onLogIn }) {
   container.innerHTML = `
     <div class="view view-onboarding active" id="view-onboarding">
       <!-- Visible Ambient Sculptural Clouds in Background -->
@@ -27,20 +29,13 @@ export function renderOnboardingView(container, { onSignUp, onLogIn, onSkip }) {
       <!-- Top Header with Sculpted melo. Brand Logo -->
       <div class="onboarding-header">
         <div class="brand-logo-wrap" title="melo.">
-          <div class="brand-logo-emblem">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10.5" fill="#111111" />
-              <!-- Sculptural audio wave flow -->
-              <path d="M 7.5 15 C 7.5 10 10 9 12 12.5 C 14 16 16.5 14 16.5 8.5" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-              <circle cx="12" cy="6.2" r="1.4" fill="#FFFFFF" />
-            </svg>
+          <div class="brand-logo-emblem" style="background: transparent; border: none; box-shadow: none; width: 34px; height: 34px;">
+            <img src="/icons/logo-badge.png" alt="Melo Logo" style="width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.18));" />
           </div>
           <div class="brand-logo-text">
             melo<span class="brand-logo-dot">.</span>
           </div>
         </div>
-
-        <button class="btn-skip" id="btn-onboarding-skip">Skip</button>
       </div>
 
       <!-- Floating Organic Artist Showcase (4 Floating Profiles) -->
@@ -99,6 +94,11 @@ export function renderOnboardingView(container, { onSignUp, onLogIn, onSkip }) {
           Immerse Yourself In A World Where Every Beat Enhances Your Mood And Every Melody Tells Your Story.
         </p>
 
+        <!-- Offline notice if disconnected -->
+        <div id="onboarding-network-notice" style="display: none; background: rgba(229, 57, 53, 0.08); border: 1px solid rgba(229, 57, 53, 0.25); border-radius: 14px; padding: 10px 14px; font-size: 12.5px; color: #D32F2F; text-align: center; margin-bottom: 8px;">
+          Internet connection required. Please connect to Wi-Fi to sign up or log in.
+        </div>
+
         <div class="onboarding-actions">
           <button class="btn-black-pill" id="btn-onboarding-signup">
             Sign Up
@@ -111,8 +111,24 @@ export function renderOnboardingView(container, { onSignUp, onLogIn, onSkip }) {
     </div>
   `;
 
-  // Attach event listeners
-  container.querySelector('#btn-onboarding-skip').addEventListener('click', onSkip);
-  container.querySelector('#btn-onboarding-signup').addEventListener('click', onSignUp);
-  container.querySelector('#btn-onboarding-login').addEventListener('click', onLogIn);
+  const notice = container.querySelector('#onboarding-network-notice');
+
+  function checkNetworkAndProceed(action) {
+    if (!networkService.isOnline && !navigator.onLine) {
+      if (notice) {
+        notice.style.display = 'block';
+        setTimeout(() => { notice.style.display = 'none'; }, 4000);
+      }
+      return;
+    }
+    if (action) action();
+  }
+
+  // Attach event listeners (Strict sign up / login, no skip)
+  container.querySelector('#btn-onboarding-signup')?.addEventListener('click', () => {
+    checkNetworkAndProceed(onSignUp);
+  });
+  container.querySelector('#btn-onboarding-login')?.addEventListener('click', () => {
+    checkNetworkAndProceed(onLogIn);
+  });
 }

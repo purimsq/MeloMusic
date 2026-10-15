@@ -3,7 +3,7 @@ import { Icons } from './icons.js';
 import { Storage } from '../services/storage.js';
 import { DEFAULT_FALLBACK_COVER } from '../data/samples.js';
 
-export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics, onOpenQueue }) {
+export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics, onOpenQueue, onOpenEqualizer }) {
   const currentTrack = audioEngine.currentTrack || audioEngine.queue[0];
   const isLiked = currentTrack ? Storage.isSongLiked(currentTrack.id) : false;
 
@@ -23,6 +23,9 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
         <span class="player-header-title">Now Playing</span>
 
         <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn-circle-nav" id="btn-player-equalizer" title="Song Equalizer Studio" style="width: 38px; height: 38px;">
+            ${Icons.sliders(18)}
+          </button>
           <button class="btn-circle-nav" id="btn-player-queue" title="View Queue / Up Next" style="width: 38px; height: 38px;">
             ${Icons.queue(18)}
           </button>
@@ -151,6 +154,16 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     playPauseBtn.innerHTML = isPlaying ? Icons.pause(26) : Icons.play(26);
   });
 
+  audioEngine.subscribe('loadingChange', ({ isLoading }) => {
+    if (isLoading) {
+      timeDisplay.innerHTML = `LOADING <span>|</span> FETCHING STREAM`;
+      playPauseBtn.innerHTML = `<div class="melo-btn-spinner"></div>`;
+    } else {
+      playPauseBtn.innerHTML = audioEngine.isPlaying ? Icons.pause(26) : Icons.play(26);
+      timeDisplay.innerHTML = `${formatTime(audioEngine.currentTime)} <span>|</span> ${formatTime(audioEngine.duration)}`;
+    }
+  });
+
   audioEngine.subscribe('trackChange', (track) => {
     trackTitle.textContent = track.title;
     artistName.textContent = track.artist;
@@ -233,15 +246,18 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
   });
 
   // Convenient Like Button
-  heartBtn.addEventListener('click', () => {
+  heartBtn.addEventListener('click', async () => {
     if (!audioEngine.currentTrack) return;
-    const liked = Storage.toggleLikeSong(audioEngine.currentTrack);
+    const liked = await Storage.toggleLikeSong(audioEngine.currentTrack);
     heartBtn.classList.toggle('liked', liked);
     heartBtn.innerHTML = Icons.heart(24, liked);
   });
 
-  // Navigation, Queue & Lyrics triggers
+  // Navigation, Equalizer, Queue & Lyrics triggers
   container.querySelector('#btn-player-back').addEventListener('click', onBack);
+  container.querySelector('#btn-player-equalizer')?.addEventListener('click', () => {
+    if (onOpenEqualizer) onOpenEqualizer();
+  });
   lyricsBtn.addEventListener('click', onOpenLyrics);
   const queueBtn = container.querySelector('#btn-player-queue');
   queueBtn?.addEventListener('click', () => {

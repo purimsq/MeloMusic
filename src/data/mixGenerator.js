@@ -64,37 +64,28 @@ const EXTENDED_SONGS = {
     'Super Bass', 'Starships', 'Anaconda', 'Super Freaky Girl',
     'Chun-Li', 'Pound The Alarm', 'Moment 4 Life', 'Bang Bang', 'Star'
   ],
-  'ksi': [
-    'CLASH OF TITANS', 'Holiday', 'Down Like That', 'Not Over Yet',
-    'Patience', 'Lighter', 'Voices', 'Really Love', 'Lose'
+  'lil-tjay': [
+    'Calling My Phone', 'F.N', 'Mood Swings', 'Pop Out',
+    'Leaked', 'Run It Up', 'Hold On', 'Sex Sounds', 'Brothers'
+  ],
+  'paygotti': [
+    'GANG BIZNESS', 'Candy Paint', 'Bakc 2 Bakc', 'Benz or Mazda',
+    'My Evil Thoughts', 'Addicted', 'Stranger', 'Watch It Burn'
   ]
 };
-
-// Stream audio pool
-const AUDIO_STREAMS = [
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',
-  'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3'
-];
 
 /**
  * Builds a track object
  */
 function createTrack(id, title, artistObj, index) {
-  const audioIndex = (index + (artistObj.id.charCodeAt(0) || 0)) % AUDIO_STREAMS.length;
   return {
     id,
     title: title.toUpperCase(),
     artist: artistObj.name,
     album: `${artistObj.name} • Special Edition`,
-    duration: 185 + ((index * 13) % 75), // 185s to 260s
+    duration: 195 + ((index * 13) % 75), // 195s to 270s
     cover: artistObj.photo || DEFAULT_FALLBACK_COVER,
-    audioUrl: AUDIO_STREAMS[audioIndex],
+    needsResolution: true, // streams exact official audio track from YouTube ad-free
     lyrics: `[00:00.00] ${title} - ${artistObj.name}\n[00:08.00] Feel the rhythm flowing through the night\n[00:16.00] Echoes in the ceramic sanctuary\n[00:25.00] Every beat crafted with precision\n[00:36.00] Melo sound signature in high fidelity\n[00:48.00] Music without borders`
   };
 }
@@ -144,7 +135,7 @@ export function generateCuratedMixes(favoriteArtistIds = []) {
 
   // 3. Pure Energy & Workout Flow (28 Songs)
   const energyArtists = ARTISTS.filter(a =>
-    ['kendrick-lamar', 'eminem', 'travis-scott', 'ksi', 'j-cole'].includes(a.id)
+    ['kendrick-lamar', 'eminem', 'travis-scott', 'lil-tjay', 'paygotti', 'j-cole'].includes(a.id)
   );
   const energyTracks = [];
   for (let i = 0; i < 28; i++) {
