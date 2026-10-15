@@ -132,13 +132,14 @@ assert(!samplesJs.includes('sample-say-yes-to-heaven'), 'sample-say-yes-to-heave
 assert(samplesJs.includes('sample-gods-plan'), 'sample-gods-plan added to samples.js');
 assert(samplesJs.includes('xpVfcZ0ZcFM'), 'Gods Plan has valid YouTube video ID xpVfcZ0ZcFM');
 
-// 12. Song Progress Bar Moving with Song
-console.log('\n--- 12. Song Progress Bar Tracking & Seeking ---');
+// 12. Song Progress Bar: Circular Orbit Scrubber Exclusivity & Real-time Tracking
+console.log('\n--- 12. Song Progress Bar: Circular Orbit Scrubber Exclusivity ---');
 const playerViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/playerView.js'), 'utf8');
-assert(playerViewJs.includes('player-linear-bar-track'), 'playerView.js includes linear progress bar track');
-assert(playerViewJs.includes('player-linear-bar-fill'), 'playerView.js includes linear progress bar fill');
-assert(playerViewJs.includes('linearTrack.addEventListener(\'click\''), 'playerView.js supports clicking to seek on progress bar');
-assert(mainJs.includes('mini-progress-fill'), 'main.js includes mini-player progress fill');
+assert(!playerViewJs.includes('player-linear-bar-track'), 'playerView.js does not include linear progress bar (keeping only circular)');
+assert(playerViewJs.includes('orbit-progress-fill'), 'playerView.js uses circular orbit progress fill');
+assert(playerViewJs.includes('orbit-scrubber-dot'), 'playerView.js uses circular orbit scrubber dot');
+assert(playerViewJs.includes('updateCircleScrubber(progress)'), 'playerView.js updates circular scrubber dynamically with song progress');
+assert(playerViewJs.includes("orbitSvg.addEventListener('mousedown'"), 'playerView.js supports scrubbing circular progress bar on drag/touch');
 
 const audioEngineJs = fs.readFileSync(path.join(projectRoot, 'src/services/audioEngine.js'), 'utf8');
 assert(audioEngineJs.includes('this.startYouTubeProgressTracker()'), 'audioEngine.js starts progress tracker on play and load');

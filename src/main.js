@@ -60,9 +60,6 @@ class App {
 
         <!-- Mini-Player Bar (docked above navigation) -->
         <div class="mini-player-bar hidden" id="mini-player-bar">
-          <div class="mini-progress-track">
-            <div class="mini-progress-fill" id="mini-progress-fill"></div>
-          </div>
           <div class="mini-left">
             <img class="mini-thumb" id="mini-thumb" src="${DEFAULT_FALLBACK_COVER}" alt="Track artwork" />
             <div class="mini-info">
@@ -436,12 +433,6 @@ class App {
       }
     });
 
-    const miniFill = document.querySelector('#mini-progress-fill');
-    audioEngine.subscribe('timeUpdate', ({ progress }) => {
-      if (miniFill) {
-        miniFill.style.width = `${Math.min(100, Math.max(0, progress * 100)).toFixed(2)}%`;
-      }
-    });
   }
 
   /**

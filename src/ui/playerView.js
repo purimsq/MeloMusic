@@ -81,17 +81,6 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
         </button>
       </div>
 
-      <!-- Linear Progress Bar & Timestamps -->
-      <div class="player-linear-progress-section" id="player-linear-progress-section">
-        <div class="player-linear-bar-track" id="player-linear-bar-track" title="Seek track position">
-          <div class="player-linear-bar-fill" id="player-linear-bar-fill"></div>
-          <div class="player-linear-bar-thumb" id="player-linear-bar-thumb"></div>
-        </div>
-        <div class="player-linear-timestamps">
-          <span id="player-linear-time-curr">00:00</span>
-          <span id="player-linear-time-dur">${formatTime(currentTrack ? currentTrack.duration : 0)}</span>
-        </div>
-      </div>
 
       <!-- Controls Bar -->
       <div class="player-controls-bar">
@@ -122,11 +111,6 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
   const orbitSvg = container.querySelector('#orbit-svg-element');
   const progressFill = container.querySelector('#orbit-progress-fill');
   const orbitDot = container.querySelector('#orbit-scrubber-dot');
-  const linearTrack = container.querySelector('#player-linear-bar-track');
-  const linearFill = container.querySelector('#player-linear-bar-fill');
-  const linearThumb = container.querySelector('#player-linear-bar-thumb');
-  const timeCurr = container.querySelector('#player-linear-time-curr');
-  const timeDur = container.querySelector('#player-linear-time-dur');
   const timeDisplay = container.querySelector('#player-time-display');
   const coverImg = container.querySelector('#player-cover-image');
   const trackTitle = container.querySelector('#player-track-title');
@@ -144,6 +128,11 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
   let isSeeking = false;
   let wasPlayingBeforeSeek = false;
   let currentProgressRatio = 0;
+
+  // Initialize circular scrubber if already playing
+  if (audioEngine.duration > 0) {
+    updateCircleScrubber(audioEngine.currentTime / audioEngine.duration);
+  }
 
   // Updates Scrubber position around circular orbit
   function updateCircleScrubber(progress) {
@@ -164,26 +153,8 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     if (!isSeeking) {
       timeDisplay.innerHTML = `${formatTime(currentTime)} <span>|</span> ${formatTime(duration)}`;
       updateCircleScrubber(progress);
-      const pct = `${Math.min(100, Math.max(0, progress * 100)).toFixed(2)}%`;
-      if (linearFill) linearFill.style.width = pct;
-      if (linearThumb) linearThumb.style.left = pct;
-      if (timeCurr) timeCurr.textContent = formatTime(currentTime);
-      if (timeDur && duration > 0) timeDur.textContent = formatTime(duration);
     }
   });
-
-  if (linearTrack) {
-    linearTrack.addEventListener('click', (e) => {
-      const rect = linearTrack.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
-      audioEngine.seekRatio(ratio);
-      updateCircleScrubber(ratio);
-      const pct = `${(ratio * 100).toFixed(2)}%`;
-      if (linearFill) linearFill.style.width = pct;
-      if (linearThumb) linearThumb.style.left = pct;
-    });
-  }
 
   audioEngine.subscribe('playStateChange', ({ isPlaying }) => {
     playPauseBtn.innerHTML = isPlaying ? Icons.pause(26) : Icons.play(26);
@@ -203,7 +174,6 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     trackTitle.textContent = track.title;
     artistName.textContent = track.artist;
     coverImg.src = track.cover || DEFAULT_FALLBACK_COVER;
-    if (timeDur && track.duration) timeDur.textContent = formatTime(track.duration);
     const isNowLiked = Storage.isSongLiked(track.id);
     heartBtn.className = `btn-heart-convenient ${isNowLiked ? 'liked' : ''}`;
     heartBtn.innerHTML = Icons.heart(24, isNowLiked);
