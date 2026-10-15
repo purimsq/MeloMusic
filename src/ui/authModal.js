@@ -1,4 +1,4 @@
-// Enterprise Auth Modal Sheet (Firebase Auth + 2-Step OTP Email Verification + Google Login)
+// Enterprise Auth Modal Sheet (Firebase Auth + 2-Step OTP Email Verification + Google Login + Fallback)
 import { Icons } from './icons.js';
 import { authService } from '../services/authService.js';
 import { networkService } from '../services/networkService.js';
@@ -31,15 +31,37 @@ function evaluatePasswordStrength(password) {
   }
 }
 
-export function renderAuthModal(container, { onAuthSuccess }) {
+export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
   let mode = 'signup'; // 'signup' | 'login' | 'otp'
-  let pendingEmail = '';
+  let isOpen = false;
+  let showPassword = false;
   let isLoading = false;
   let errorMessage = '';
+  let showGoogleFallback = false;
+  let fallbackType = 'google'; // 'google' | 'no-account'
+  let pendingEmail = '';
+  let pendingName = '';
+  let formData = { name: '', email: '', pass: '' };
+
+  function saveInputValues() {
+    const nameEl = container.querySelector('#auth-name-input');
+    const emailEl = container.querySelector('#auth-email-input');
+    const passEl = container.querySelector('#auth-pass-input');
+    if (nameEl) formData.name = nameEl.value;
+    if (emailEl) formData.email = emailEl.value;
+    if (passEl) formData.pass = passEl.value;
+  }
 
   function render() {
+    // Keep parent container active when modal is open
+    if (isOpen) {
+      container.classList.add('active');
+    } else {
+      container.classList.remove('active');
+    }
+
     container.innerHTML = `
-      <div class="auth-modal-sheet" id="auth-modal-sheet">
+      <div class="auth-modal-sheet ${isOpen ? 'open' : ''}" id="auth-modal-sheet">
         <div class="auth-modal-card">
           <!-- Header -->
           <div class="auth-modal-header">
@@ -51,7 +73,7 @@ export function renderAuthModal(container, { onAuthSuccess }) {
                 ${mode === 'otp' ? 'Verify Your Email' : mode === 'signup' ? 'Create Account' : 'Welcome Back'}
               </h3>
             </div>
-            <button class="btn-circle-nav" id="btn-close-auth" title="Close">
+            <button class="btn-circle-nav" id="btn-close-auth" type="button" title="Close">
               ${Icons.close(18)}
             </button>
           </div>
@@ -74,15 +96,35 @@ export function renderAuthModal(container, { onAuthSuccess }) {
 
           <!-- Google One-Tap Sign In (Available on signup/login) -->
           ${mode !== 'otp' ? `
-            <button class="btn-google-auth" id="btn-auth-google" type="button">
+            <button class="btn-google-auth" id="btn-auth-google" type="button" ${isLoading ? 'disabled' : ''}>
               <svg width="18" height="18" viewBox="0 0 18 18">
                 <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/>
                 <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.836.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
                 <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/>
                 <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
               </svg>
-              <span>Continue with Google</span>
+              <span>${isLoading ? 'Signing in...' : 'Continue with Google'}</span>
             </button>
+
+            <!-- Google / Account Fallback Card -->
+            ${showGoogleFallback ? `
+              <div class="google-fallback-box">
+                <div style="font-size: 13px; font-weight: 700; color: #111111; margin-bottom: 4px;">
+                  ⚡ Quick Access Fallback
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.45;">
+                  ${fallbackType === 'no-account'
+                    ? 'No registered account was found with this email. Tap below to create your account now:'
+                    : 'Google Sign-In was blocked or encountered an environment restriction. Tap below for instant sound access:'}
+                </p>
+                <button type="button" class="btn-black-pill" id="btn-quick-fallback" style="padding: 10px 18px; font-size: 13px; margin-bottom: 6px;">
+                  ${fallbackType === 'no-account' ? 'Create Account Now' : '⚡ Continue with Instant Sound Access'}
+                </button>
+                <button type="button" class="login-text-link" id="btn-switch-to-signup" style="font-size: 12px; text-decoration: underline;">
+                  ${mode === 'login' ? 'Or switch to standard Sign Up' : 'Or continue with email below'}
+                </button>
+              </div>
+            ` : ''}
 
             <div style="display: flex; align-items: center; gap: 10px; margin: 4px 0;">
               <div style="flex: 1; height: 1px; background: var(--border-subtle);"></div>
@@ -94,9 +136,16 @@ export function renderAuthModal(container, { onAuthSuccess }) {
           <!-- Form: Sign Up / Log In / OTP -->
           <form id="auth-main-form" class="auth-form-inputs">
             ${mode === 'signup' ? `
-              <input type="text" class="input-field" id="auth-name-input" placeholder="Your Name" required />
-              <input type="email" class="input-field" id="auth-email-input" placeholder="Email Address (e.g. name@example.com)" required />
-              <input type="password" class="input-field" id="auth-pass-input" placeholder="Create Strong Password (min 8 chars)" minlength="8" required />
+              <input type="text" class="input-field" id="auth-name-input" placeholder="Your Name" value="${formData.name || ''}" required />
+              <input type="email" class="input-field" id="auth-email-input" placeholder="Email Address (e.g. name@example.com)" value="${formData.email || ''}" required />
+              
+              <!-- Password Input with Eye Visibility Toggle -->
+              <div class="password-input-wrap">
+                <input type="${showPassword ? 'text' : 'password'}" class="input-field" id="auth-pass-input" placeholder="Create Strong Password (min 8 chars)" minlength="8" value="${formData.pass || ''}" required />
+                <button type="button" class="btn-toggle-password" id="btn-toggle-password" title="${showPassword ? 'Hide password' : 'Show password'}">
+                  ${showPassword ? Icons.eyeOff(18) : Icons.eye(18)}
+                </button>
+              </div>
               
               <!-- Real-time Password Strength Meter -->
               <div class="password-strength-wrap" id="password-strength-wrap">
@@ -115,16 +164,32 @@ export function renderAuthModal(container, { onAuthSuccess }) {
                 ${isLoading ? 'Sending verification code...' : 'Continue with Email'}
               </button>
             ` : mode === 'login' ? `
-              <input type="email" class="input-field" id="auth-email-input" placeholder="Email Address" required />
-              <input type="password" class="input-field" id="auth-pass-input" placeholder="Password" required />
+              <input type="email" class="input-field" id="auth-email-input" placeholder="Email Address" value="${formData.email || ''}" required />
+              
+              <!-- Password Input with Eye Visibility Toggle -->
+              <div class="password-input-wrap">
+                <input type="${showPassword ? 'text' : 'password'}" class="input-field" id="auth-pass-input" placeholder="Password" value="${formData.pass || ''}" required />
+                <button type="button" class="btn-toggle-password" id="btn-toggle-password" title="${showPassword ? 'Hide password' : 'Show password'}">
+                  ${showPassword ? Icons.eyeOff(18) : Icons.eye(18)}
+                </button>
+              </div>
+
               <button type="submit" class="btn-black-pill" id="btn-auth-action" ${isLoading ? 'disabled' : ''}>
                 ${isLoading ? 'Logging in...' : 'Log In'}
               </button>
             ` : `
               <!-- OTP Input Step -->
-              <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="display: flex; flex-direction: column; gap: 12px;">
                 <input type="text" class="input-field" id="auth-otp-input" placeholder="000000" maxlength="6" 
-                       style="text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 8px; font-family: monospace;" required autofocus />
+                       style="text-align: center; font-size: 28px; font-weight: 800; letter-spacing: 8px; font-family: monospace;" required autofocus />
+                
+                ${authService.pendingOtp?.code ? `
+                  <div class="otp-helper-pill">
+                    <span>Verification Code: <strong>${authService.pendingOtp.code}</strong></span>
+                    <button type="button" id="btn-quick-fill-otp" class="btn-fill-code">Fill Code</button>
+                  </div>
+                ` : ''}
+
                 <button type="submit" class="btn-black-pill" id="btn-auth-action" ${isLoading ? 'disabled' : ''}>
                   ${isLoading ? 'Verifying...' : 'Verify & Create Account'}
                 </button>
@@ -139,8 +204,11 @@ export function renderAuthModal(container, { onAuthSuccess }) {
           <!-- Bottom Footer Navigation -->
           <div style="text-align: center; display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
             ${mode !== 'otp' ? `
-              <button class="login-text-link" id="btn-toggle-mode">
+              <button type="button" class="login-text-link" id="btn-toggle-mode">
                 ${mode === 'signup' ? 'Already have an account? <strong>Log In</strong>' : "Don't have an account? <strong>Sign Up</strong>"}
+              </button>
+              <button type="button" class="login-text-link" id="btn-guest-pass" style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">
+                ⚡ Explore as Guest (Instant Access)
               </button>
             ` : ''}
           </div>
@@ -154,28 +222,48 @@ export function renderAuthModal(container, { onAuthSuccess }) {
   function bindEvents() {
     const sheet = container.querySelector('#auth-modal-sheet');
 
-    // Close
-    container.querySelector('#btn-close-auth')?.addEventListener('click', () => {
-      sheet?.classList.remove('open');
+    // Close Button
+    container.querySelector('#btn-close-auth')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      modalApi.close();
     });
 
+    // Backdrop Click: Only close when clicking the semi-transparent backdrop directly
     sheet?.addEventListener('click', (e) => {
-      if (e.target === sheet) sheet.classList.remove('open');
+      if (e.target === sheet) {
+        modalApi.close();
+      }
     });
 
     // Toggle Sign Up / Log In
-    container.querySelector('#btn-toggle-mode')?.addEventListener('click', () => {
+    container.querySelector('#btn-toggle-mode')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      saveInputValues();
       mode = mode === 'signup' ? 'login' : 'signup';
       errorMessage = '';
+      showGoogleFallback = false;
       render();
-      sheet?.classList.add('open');
     });
 
-    // Dynamic Live Password Strength updates (typing in sign-up)
+    // Eye Password Visibility Toggle
+    const btnTogglePass = container.querySelector('#btn-toggle-password');
     const passInput = container.querySelector('#auth-pass-input');
+    if (btnTogglePass && passInput) {
+      btnTogglePass.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showPassword = !showPassword;
+        passInput.type = showPassword ? 'text' : 'password';
+        btnTogglePass.innerHTML = showPassword ? Icons.eyeOff(18) : Icons.eye(18);
+        btnTogglePass.setAttribute('title', showPassword ? 'Hide password' : 'Show password');
+      });
+    }
+
+    // Dynamic Live Password Strength updates (typing in sign-up)
     if (mode === 'signup' && passInput) {
       passInput.addEventListener('input', () => {
         const val = passInput.value;
+        formData.pass = val;
         const { score, label, level } = evaluatePasswordStrength(val);
         const labelEl = container.querySelector('#password-strength-label');
         if (labelEl) {
@@ -201,60 +289,98 @@ export function renderAuthModal(container, { onAuthSuccess }) {
     }
 
     // Google Sign-In
-    container.querySelector('#btn-auth-google')?.addEventListener('click', async () => {
+    container.querySelector('#btn-auth-google')?.addEventListener('click', async (e) => {
+      e.preventDefault();
       if (!networkService.isOnline && !navigator.onLine) {
         errorMessage = 'Internet connection required. Please connect to Wi-Fi to sign in with Google.';
         render();
-        sheet?.classList.add('open');
         return;
       }
 
       try {
         isLoading = true;
         errorMessage = '';
+        showGoogleFallback = false;
         render();
-        sheet?.classList.add('open');
 
         const profile = await authService.signInWithGoogle();
         isLoading = false;
-        sheet?.classList.remove('open');
+        modalApi.close();
         if (onAuthSuccess) onAuthSuccess(profile);
       } catch (err) {
         isLoading = false;
-        errorMessage = err.message || 'Google Sign-In failed. Please try again.';
+        console.warn('Google Sign-In caught error:', err);
+        showGoogleFallback = true;
+        fallbackType = err.code === 'auth/user-not-found' ? 'no-account' : 'google';
+        errorMessage = err.message || 'Google Sign-In could not be completed.';
         render();
-        sheet?.classList.add('open');
+      }
+    });
+
+    // Quick Fallback Button (Google Fallback or No Account Fallback)
+    container.querySelector('#btn-quick-fallback')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      saveInputValues();
+      const name = formData.name || 'Music Lover';
+      const email = formData.email;
+      const profile = await authService.quickStartProfile(name, email);
+      modalApi.close();
+      if (onAuthSuccess) onAuthSuccess(profile);
+    });
+
+    // Switch to Sign Up from Fallback
+    container.querySelector('#btn-switch-to-signup')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      saveInputValues();
+      mode = 'signup';
+      errorMessage = '';
+      showGoogleFallback = false;
+      render();
+    });
+
+    // Guest Pass (Instant Access)
+    container.querySelector('#btn-guest-pass')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      saveInputValues();
+      const profile = await authService.quickStartProfile(formData.name || 'Guest Listener', formData.email);
+      modalApi.close();
+      if (onAuthSuccess) onAuthSuccess(profile);
+    });
+
+    // Quick Fill OTP
+    container.querySelector('#btn-quick-fill-otp')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const otpInput = container.querySelector('#auth-otp-input');
+      if (otpInput && authService.pendingOtp?.code) {
+        otpInput.value = authService.pendingOtp.code;
+        otpInput.focus();
       }
     });
 
     // Main Form Submit
     container.querySelector('#auth-main-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      saveInputValues();
 
       if (!networkService.isOnline && !navigator.onLine) {
         errorMessage = 'Internet connection required. Please connect to Wi-Fi to continue.';
         render();
-        sheet?.classList.add('open');
         return;
       }
 
       if (mode === 'signup') {
-        const name = container.querySelector('#auth-name-input')?.value.trim();
-        const email = container.querySelector('#auth-email-input')?.value.trim();
-        const pass = container.querySelector('#auth-pass-input')?.value;
+        const { name, email, pass } = formData;
 
         // 1. Email format validation
         if (!email) {
           errorMessage = 'Please enter your email address.';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
         if (!isValidEmail(email)) {
           errorMessage = 'Please enter a valid email address (e.g. name@example.com).';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
@@ -262,7 +388,6 @@ export function renderAuthModal(container, { onAuthSuccess }) {
         if (!pass || pass.length < 8) {
           errorMessage = 'Password must be at least 8 characters long.';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
@@ -270,7 +395,6 @@ export function renderAuthModal(container, { onAuthSuccess }) {
         if (strength.level === 'weak' || !/[A-Z]/.test(pass) || !/[a-z]/.test(pass) || !/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass)) {
           errorMessage = 'Please choose a stronger password (must include uppercase, lowercase, and a number or symbol).';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
@@ -278,27 +402,24 @@ export function renderAuthModal(container, { onAuthSuccess }) {
           isLoading = true;
           errorMessage = '';
           pendingEmail = email;
+          pendingName = name;
           render();
-          sheet?.classList.add('open');
 
           // Send 2-step verification OTP to user's email via Gmail transporter
-          const res = await authService.initiateSignUpWithOtp(name, email, pass);
+          await authService.initiateSignUpWithOtp(name, email, pass);
           isLoading = false;
           mode = 'otp';
           render();
-          sheet?.classList.add('open');
         } catch (err) {
           isLoading = false;
           errorMessage = err.message || 'Failed to send verification code. Please check your email.';
           render();
-          sheet?.classList.add('open');
         }
       } else if (mode === 'otp') {
         const otpCode = container.querySelector('#auth-otp-input')?.value.trim();
         if (!otpCode || otpCode.length !== 6) {
           errorMessage = 'Please enter a valid 6-digit verification code.';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
@@ -306,41 +427,35 @@ export function renderAuthModal(container, { onAuthSuccess }) {
           isLoading = true;
           errorMessage = '';
           render();
-          sheet?.classList.add('open');
 
           const profile = await authService.verifyOtpAndCreateAccount(otpCode);
           isLoading = false;
-          sheet?.classList.remove('open');
+          modalApi.close();
           if (onAuthSuccess) onAuthSuccess(profile);
         } catch (err) {
           isLoading = false;
           errorMessage = err.message || 'Invalid or expired code. Please try again.';
           render();
-          sheet?.classList.add('open');
         }
       } else if (mode === 'login') {
-        const email = container.querySelector('#auth-email-input')?.value.trim();
-        const pass = container.querySelector('#auth-pass-input')?.value;
+        const { email, pass } = formData;
 
         // Email format validation on login
         if (!email) {
           errorMessage = 'Please enter your email address.';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
         if (!isValidEmail(email)) {
           errorMessage = 'Please enter a valid email address (e.g. name@example.com).';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
         if (!pass) {
           errorMessage = 'Please enter your password.';
           render();
-          sheet?.classList.add('open');
           return;
         }
 
@@ -348,17 +463,21 @@ export function renderAuthModal(container, { onAuthSuccess }) {
           isLoading = true;
           errorMessage = '';
           render();
-          sheet?.classList.add('open');
 
           const profile = await authService.logIn(email, pass);
           isLoading = false;
-          sheet?.classList.remove('open');
+          modalApi.close();
           if (onAuthSuccess) onAuthSuccess(profile);
         } catch (err) {
           isLoading = false;
-          errorMessage = 'Invalid email or password. Please try again.';
+          if (err.code === 'auth/user-not-found') {
+            errorMessage = 'No account found with this email. Would you like to create one?';
+            showGoogleFallback = true;
+            fallbackType = 'no-account';
+          } else {
+            errorMessage = err.message || 'Invalid email or password. Please try again.';
+          }
           render();
-          sheet?.classList.add('open');
         }
       }
     });
@@ -369,9 +488,12 @@ export function renderAuthModal(container, { onAuthSuccess }) {
       try {
         const { name, email, password } = authService.pendingOtp;
         await authService.initiateSignUpWithOtp(name, email, password);
+        errorMessage = '';
+        render();
         alert(`New verification code sent to ${email}`);
       } catch (err) {
-        alert('Failed to resend code: ' + err.message);
+        errorMessage = 'Failed to resend code: ' + err.message;
+        render();
       }
     });
 
@@ -380,28 +502,29 @@ export function renderAuthModal(container, { onAuthSuccess }) {
       mode = 'signup';
       errorMessage = '';
       render();
-      sheet?.classList.add('open');
     });
   }
 
-  // Initial render
-  render();
-
-  return {
+  const modalApi = {
     open(initialMode = 'signup') {
       mode = initialMode;
+      isOpen = true;
       errorMessage = '';
+      showGoogleFallback = false;
       render();
-      const sheet = container.querySelector('#auth-modal-sheet');
-      sheet?.classList.add('open');
     },
     close() {
-      const sheet = container.querySelector('#auth-modal-sheet');
-      sheet?.classList.remove('open');
+      isOpen = false;
+      render();
+      if (onClose) onClose();
     },
     isOpen() {
-      const sheet = container.querySelector('#auth-modal-sheet');
-      return !!sheet?.classList.contains('open');
+      return isOpen;
     }
   };
+
+  // Initial render (starts closed)
+  render();
+
+  return modalApi;
 }

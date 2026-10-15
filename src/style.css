@@ -161,6 +161,11 @@ html, body {
   overflow: hidden;
 }
 
+#auth-modal-container.active,
+#auth-modal-container:has(.auth-modal-sheet.open) {
+  pointer-events: auto;
+}
+
 /* ==========================================================================
    VIEW 1: ONBOARDING SCREEN (Zero Gaps, Full Screen Edge-to-Edge Responsiveness)
    ========================================================================== */
@@ -2571,7 +2576,7 @@ html, body {
   width: 100%;
   background-color: var(--bg-card);
   border-radius: 32px 32px 0 0;
-  padding: 30px 22px 36px;
+  padding: 28px 22px 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2579,10 +2584,85 @@ html, body {
   transform: translateY(100%);
   transition: transform 0.35s var(--ease-spring);
   padding-bottom: max(env(safe-area-inset-bottom), 24px);
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .auth-modal-sheet.open .auth-modal-card {
   transform: translateY(0);
+}
+
+.password-input-wrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrap .input-field {
+  width: 100%;
+  padding-right: 48px !important;
+}
+
+.btn-toggle-password {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 10px;
+  transition: color 0.2s, background 0.2s;
+  z-index: 2;
+}
+
+.btn-toggle-password:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.google-fallback-box {
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px dashed rgba(0, 0, 0, 0.14);
+  border-radius: 18px;
+  padding: 14px 16px;
+  text-align: center;
+  margin-top: 4px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.otp-helper-pill {
+  background: rgba(30, 114, 39, 0.08);
+  border: 1px solid rgba(30, 114, 39, 0.22);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #1E7227;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-fill-code {
+  background: #1E7227;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.btn-fill-code:active {
+  transform: scale(0.96);
 }
 
 /* ==========================================================================

@@ -121,7 +121,17 @@ class App {
   initComponents() {
     // 1. Auth Modal
     this.authModal = renderAuthModal(this.authContainer, {
-      onAuthSuccess: () => this.navigateTo('artist-select')
+      onAuthSuccess: () => {
+        if (history.state && history.state.modal === 'auth') {
+          history.back();
+        }
+        this.navigateTo('artist-select');
+      },
+      onClose: () => {
+        if (history.state && history.state.modal === 'auth') {
+          history.back();
+        }
+      }
     });
 
     // 2. YouTube Music-style Lyrics Modal

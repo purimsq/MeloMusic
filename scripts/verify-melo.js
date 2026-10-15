@@ -189,6 +189,18 @@ assert(viteConfig.includes('const env = loadEnv(mode, process.cwd(), \'\')'), 'v
 assert(viteConfig.includes('env.EMAIL_USER') && viteConfig.includes('env.EMAIL_PASS'), 'vite.config.js reads EMAIL_USER and EMAIL_PASS from env');
 assert(!viteConfig.includes('hbbgiaavokfvjnxq'), 'vite.config.js contains NO hardcoded email app password');
 
+// 19. Password Eye Visibility Toggle & Auth Stability & Google Fallback
+console.log('\n--- 19. Password Visibility Toggle & Google Auth Fallback ---');
+assert(iconsJs.includes('eye: (size = 20)') && iconsJs.includes('eyeOff: (size = 20)'), 'icons.js contains eye and eyeOff icons');
+assert(authModal.includes('btn-toggle-password'), 'authModal provides password visibility toggle button with eye icon');
+assert(authModal.includes('password-input-wrap'), 'authModal wraps password input in password-input-wrap');
+assert(authModal.includes('google-fallback-box'), 'authModal provides Google auth and account not found fallback');
+assert(authModal.includes('btn-guest-pass'), 'authModal provides instant guest / demo access for zero friction');
+assert(authService.includes('quickStartProfile'), 'authService provides quickStartProfile method for seamless fallback');
+assert(fs.existsSync(path.join(projectRoot, 'api/send-otp.js')), 'api/send-otp.js Vercel serverless function exists');
+assert(fs.existsSync(path.join(projectRoot, 'api/send-welcome.js')), 'api/send-welcome.js Vercel serverless function exists');
+assert(authModal.includes('${isOpen ? \'open\' : \'\'}'), 'authModal template keeps open state persistent across renders');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);
@@ -196,4 +208,5 @@ console.log(`==========================================\n`);
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+
 
