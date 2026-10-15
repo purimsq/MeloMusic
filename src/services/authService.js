@@ -30,6 +30,10 @@ class AuthService {
         const profile = await this.syncUserProfile(user);
         this.userProfile = profile;
         Storage.setUserProfile(profile);
+        if (profile?.favoriteArtists && profile.favoriteArtists.length >= 3) {
+          Storage.setFavoriteArtists(profile.favoriteArtists);
+          Storage.setCompletedOnboarding(true);
+        }
       } else {
         this.currentUser = null;
       }

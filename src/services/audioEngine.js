@@ -69,14 +69,29 @@ export class AudioEngine {
     }
 
     this.ytPlayerPromise = new Promise((resolve) => {
+      let attempts = 0;
+      const maxAttempts = 25; // ~3.75s timeout max
+
       const init = () => {
+        attempts++;
         if (!window.YT || !window.YT.Player) {
+          if (attempts >= maxAttempts || !navigator.onLine) {
+            console.warn('YouTube Player API unavailable or timed out');
+            this.ytPlayerPromise = null;
+            resolve(null);
+            return;
+          }
           setTimeout(init, 150);
           return;
         }
 
         const container = document.getElementById('melo-yt-container');
         if (!container) {
+          if (attempts >= maxAttempts) {
+            this.ytPlayerPromise = null;
+            resolve(null);
+            return;
+          }
           setTimeout(init, 150);
           return;
         }
@@ -110,22 +125,39 @@ export class AudioEngine {
                 console.warn('YouTube Player error code:', err.data);
                 this.isLoadingTrack = false;
                 this.notify('loadingChange', { isLoading: false, track: this.currentTrack });
+                if (this.currentTrack?.audioUrl) {
+                  this.currentMode = 'html5';
+                  this.audio.src = this.currentTrack.audioUrl;
+                  this.audio.play().catch(() => {});
+                }
               }
             }
           });
         } catch (e) {
           console.warn('Error constructing YT player:', e);
+          this.ytPlayerPromise = null;
+          resolve(null);
         }
       };
 
       if (window.YT && window.YT.Player) {
         init();
-      } else {
+      } else if (navigator.onLine) {
+        if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+          const tag = document.createElement('script');
+          tag.src = 'https://www.youtube.com/iframe_api';
+          tag.async = true;
+          document.body.appendChild(tag);
+        }
         const prevReady = window.onYouTubeIframeAPIReady;
         window.onYouTubeIframeAPIReady = () => {
           if (typeof prevReady === 'function') prevReady();
           init();
         };
+        setTimeout(init, 300);
+      } else {
+        this.ytPlayerPromise = null;
+        resolve(null);
       }
     });
   }
@@ -494,33 +526,37 @@ export class AudioEngine {
       this.notify('loadingChange', { isLoading: false, track });
       window.dispatchEvent(new CustomEvent('melo-toast', {
         detail: {
-          message: `"${track.title}" is not downloaded for offline use. Play a downloaded song or device track.`,
+          message: 'Track not downloaded for offline',
           isSuccess: false
         }
       }));
       return;
     }
 
-    // 3. Online Track: Stream exact master audio ad-free from YouTube
-    this.currentMode = 'yt';
-    this.audio.pause();
+    // 3. Online Track: Stream exact master audio ad-free from YouTube or high-res audio stream
     this.isLoadingTrack = true;
     this.notify('loadingChange', { isLoading: true, track });
 
     let youtubeId = track.youtubeId;
-    if (!youtubeId) {
+    if (!youtubeId && navigator.onLine) {
       youtubeId = await musicSearchService.resolveYouTubeVideoId(track);
       if (youtubeId) {
         track.youtubeId = youtubeId;
       }
     }
 
-    if (youtubeId) {
+    let playedViaYouTube = false;
+    if (youtubeId && navigator.onLine) {
       if (!this.ytPlayer || !this.ytReady) {
-        await this.initYouTubePlayer();
+        await Promise.race([
+          this.initYouTubePlayer(),
+          new Promise((r) => setTimeout(() => r(null), 3500))
+        ]);
       }
 
       if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+        this.currentMode = 'yt';
+        this.audio.pause();
         this.ytPlayer.loadVideoById({
           videoId: youtubeId,
           startSeconds: 0
@@ -536,14 +572,28 @@ export class AudioEngine {
             }
           }, 100);
         }
+        playedViaYouTube = true;
       }
-    } else {
-      // Fallback to HTML5 audioUrl if provided
+    }
+
+    // Fallback to HTML5 audio stream if YouTube was unavailable or failed
+    if (!playedViaYouTube) {
       if (track.audioUrl) {
         this.currentMode = 'html5';
+        this.stopYouTubeProgressTracker();
+        if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+          try { this.ytPlayer.pauseVideo(); } catch (e) {}
+        }
         this.audio.src = track.audioUrl;
         this.audio.load();
         if (autoPlay) this.play();
+      } else {
+        window.dispatchEvent(new CustomEvent('melo-toast', {
+          detail: {
+            message: 'Unable to stream track',
+            isSuccess: false
+          }
+        }));
       }
       this.isLoadingTrack = false;
       this.notify('loadingChange', { isLoading: false, track });

@@ -36,8 +36,8 @@ export const Storage = {
   hasCompletedOnboarding() {
     try {
       const completed = localStorage.getItem('melo_onboarding_completed') === 'true';
-      const profile = this.getUserProfile();
-      return completed && profile && profile.isLoggedIn;
+      const favs = this.getFavoriteArtists();
+      return completed || (Array.isArray(favs) && favs.length >= 3);
     } catch (e) {
       return false;
     }
@@ -121,7 +121,7 @@ export const Storage = {
       // Dispatch global toast feedback & liked changed event
       window.dispatchEvent(new CustomEvent('melo-toast', {
         detail: {
-          message: `Removed "${track.title}" from Liked Songs`,
+          message: 'Removed from Liked Songs',
           isSuccess: false
         }
       }));
@@ -142,7 +142,7 @@ export const Storage = {
       // Dispatch immediate toast feedback
       window.dispatchEvent(new CustomEvent('melo-toast', {
         detail: {
-          message: `❤️ Saved "${track.title}" to Liked Songs (Downloading for offline...)`,
+          message: 'Added to Liked Songs',
           isSuccess: true
         }
       }));

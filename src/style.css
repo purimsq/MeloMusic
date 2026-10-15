@@ -3452,8 +3452,7 @@ body:has(.playlist-popup-backdrop.open) #floating-bottom-nav,
 /* ==========================================================================
    ACTIVE INTERNET LIVE PING INDICATOR & TOAST SYSTEM
    ========================================================================== */
-.home-toast-banner,
-.global-toast-banner {
+.home-toast-banner {
   position: absolute;
   top: 14px;
   left: 50%;
@@ -3945,33 +3944,35 @@ body:has(.playlist-popup-backdrop.open) #floating-bottom-nav,
 }
 
 /* ==========================================================================
-   GLOBAL TOAST BANNER & DOWNLOAD STATUS SPINNER
+   GLOBAL TOAST NOTIFICATION (Native Android Bottom Pill Style)
    ========================================================================== */
 .global-toast-banner {
   position: fixed;
-  top: max(env(safe-area-inset-top), 20px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 99999;
-  background: rgba(18, 18, 18, 0.94);
+  background: rgba(48, 48, 48, 0.96);
   color: #FFFFFF;
-  padding: 10px 22px;
-  border-radius: 30px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(12px);
-  max-width: 90vw;
+  padding: 10px 24px;
+  border-radius: 24px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.15px;
+  line-height: 1.35;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  max-width: 86vw;
   text-align: center;
   pointer-events: none;
-  animation: toastFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: toastBottomPop 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes toastFadeIn {
+@keyframes toastBottomPop {
   from {
     opacity: 0;
-    transform: translate(-50%, -12px) scale(0.96);
+    transform: translate(-50%, 14px) scale(0.96);
   }
   to {
     opacity: 1;

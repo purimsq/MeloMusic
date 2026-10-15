@@ -122,8 +122,14 @@ class App {
     // 1. Auth Modal
     this.authModal = renderAuthModal(this.authContainer, {
       onAuthSuccess: (profile) => {
+        const favs = Storage.getFavoriteArtists();
         const alreadyOnboarded = Storage.hasCompletedOnboarding() || 
+          (favs && favs.length >= 3) ||
           (profile?.favoriteArtists && profile.favoriteArtists.length >= 3);
+
+        if (alreadyOnboarded) {
+          Storage.setCompletedOnboarding(true);
+        }
 
         const targetView = alreadyOnboarded ? 'home' : 'artist-select';
 
@@ -233,23 +239,27 @@ class App {
       }
     });
 
-    // Global Toast Event Listener
-    window.addEventListener('melo-toast', (e) => {
-      if (e.detail && e.detail.message) {
-        this.showToast(e.detail.message, e.detail.isSuccess !== false);
-      }
-    });
-
     // Monitor Network Connectivity changes globally
+    let hasNotifiedInitial = false;
     networkService.subscribe(({ isOnline }) => {
+      if (!hasNotifiedInitial) {
+        hasNotifiedInitial = true;
+        if (!isOnline) {
+          this.showToast('Offline Mode');
+        }
+        return;
+      }
       if (!isOnline) {
-        this.showToast('📶 You are offline. Downloaded & local tracks remain accessible.', false);
+        this.showToast('You are offline');
+      } else {
+        this.showToast('Back online');
       }
     });
 
     // Spotify-style One-Time Onboarding:
-    // If onboarding was already completed, open straight to Home dashboard!
-    if (Storage.hasCompletedOnboarding()) {
+    // If onboarding was already completed or user has 3+ artists, open straight to Home dashboard!
+    if (Storage.hasCompletedOnboarding() || Storage.getFavoriteArtists().length >= 3) {
+      Storage.setCompletedOnboarding(true);
       this.initHomeView();
       this.transitionToHome();
     } else {
@@ -727,16 +737,15 @@ class App {
     }
   }
 
-  showToast(message, isSuccess = true) {
+  showToast(message) {
     const banner = document.querySelector('#global-toast-banner');
     if (!banner) return;
     if (this.toastTimer) clearTimeout(this.toastTimer);
     banner.textContent = message;
-    banner.style.background = isSuccess ? '#2E7D32' : '#D32F2F';
     banner.style.display = 'block';
     this.toastTimer = setTimeout(() => {
       banner.style.display = 'none';
-    }, 3400);
+    }, 2500);
   }
 }
 

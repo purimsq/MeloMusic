@@ -86,7 +86,7 @@ assert(storage.includes('hasCompletedOnboarding'), 'storage.js has hasCompletedO
 assert(storage.includes('setCompletedOnboarding'), 'storage.js has setCompletedOnboarding method');
 
 const mainJs = fs.readFileSync(path.join(projectRoot, 'src/main.js'), 'utf8');
-assert(mainJs.includes('if (Storage.hasCompletedOnboarding())'), 'main.js routes directly to home if onboarding already completed');
+assert(mainJs.includes('Storage.hasCompletedOnboarding()'), 'main.js routes directly to home if onboarding already completed');
 assert(setupLoadingView.includes('Storage.setCompletedOnboarding(true)'), 'setupLoadingView marks onboarding as completed');
 
 // 7. Email Branding & Onboarding Email
@@ -202,6 +202,27 @@ assert(fs.existsSync(path.join(projectRoot, 'api/send-welcome.js')), 'api/send-w
 assert(authModal.includes('${isOpen ? \'open\' : \'\'}'), 'authModal template keeps open state persistent across renders');
 assert(!authModal.includes('otp-helper-pill') && !authModal.includes('btn-quick-fill-otp'), 'authModal does NOT display OTP on screen (OTP is strictly private to email)');
 assert(mainJs.includes('alreadyOnboarded') && mainJs.includes("this.navigateTo('artist-select', false)"), 'main.js cleanly navigates forward to artist-select or home without history back collisions');
+
+// 20. Offline PWA, Search Playback Fallback, Liked Songs Icon & Native Android Bottom Toast
+console.log('\n--- 20. Liked Songs Fixes, Offline Resilience & Android Bottom Toast ---');
+assert(iconsJs.includes('download: (size = 20)'), 'icons.js defines Icons.download for library and offline downloads');
+assert(fs.existsSync(path.join(projectRoot, 'api/youtube-search.js')), 'api/youtube-search.js serverless function exists');
+assert(fs.existsSync(path.join(projectRoot, 'api/artist-search.js')), 'api/artist-search.js serverless function exists');
+
+const musicSearchJs = fs.readFileSync(path.join(projectRoot, 'src/services/musicSearchService.js'), 'utf8');
+assert(musicSearchJs.includes('audioUrl: t.previewUrl || null'), 'musicSearchService includes previewUrl fallback for instant audio playback');
+assert(musicSearchJs.includes('AbortController()'), 'musicSearchService handles YouTube search timeouts cleanly');
+
+assert(!indexHtml.includes('https://www.youtube.com/iframe_api'), 'index.html does not block initial offline rendering with external YouTube script');
+
+const swJs = fs.readFileSync(path.join(projectRoot, 'public/sw.js'), 'utf8');
+assert(swJs.includes('melo-music-v2'), 'sw.js uses updated cache version melo-music-v2');
+assert(swJs.includes("req.mode === 'navigate'"), 'sw.js provides robust navigate offline fallback to index.html');
+
+assert(styleCss.includes('.global-toast-banner') && styleCss.includes('bottom: calc('), 'style.css positions global-toast-banner at the bottom');
+assert(styleCss.includes('toastBottomPop'), 'style.css animates bottom toast smoothly');
+
+assert(storage.includes('Array.isArray(favs) && favs.length >= 3'), 'storage.js hasCompletedOnboarding acknowledges already saved favorite artists');
 
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);

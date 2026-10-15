@@ -43,6 +43,7 @@ export class MusicSearchService {
           cover: highResCover,
           genre: t.primaryGenreName || 'Pop',
           releaseDate: t.releaseDate ? t.releaseDate.split('T')[0] : '2024',
+          audioUrl: t.previewUrl || null,
           needsResolution: true, // will fetch exact YouTube audio videoId on play
           lyrics: `[00:00.00] ${t.trackName} - ${t.artistName}\n[00:08.50] Streaming official audio in High Fidelity on Melo\n[00:18.00] Feel the sound waves elevate every moment\n[00:30.00] Pure ad-free acoustic experience\n[00:44.00] Melo Sound Signature`
         };
@@ -116,7 +117,14 @@ export class MusicSearchService {
 
     try {
       const q = `${track.title} ${track.artist}`;
-      const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
       if (res.ok) {
         const data = await res.json();
         if (data.videoId) {
