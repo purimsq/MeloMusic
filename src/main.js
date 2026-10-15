@@ -121,11 +121,22 @@ class App {
   initComponents() {
     // 1. Auth Modal
     this.authModal = renderAuthModal(this.authContainer, {
-      onAuthSuccess: () => {
+      onAuthSuccess: (profile) => {
+        const alreadyOnboarded = Storage.hasCompletedOnboarding() || 
+          (profile?.favoriteArtists && profile.favoriteArtists.length >= 3);
+
+        const targetView = alreadyOnboarded ? 'home' : 'artist-select';
+
         if (history.state && history.state.modal === 'auth') {
-          history.back();
+          history.replaceState({ view: targetView }, '');
         }
-        this.navigateTo('artist-select');
+
+        if (alreadyOnboarded) {
+          this.initHomeView();
+          this.navigateTo('home', false);
+        } else {
+          this.navigateTo('artist-select', false);
+        }
       },
       onClose: () => {
         if (history.state && history.state.modal === 'auth') {
@@ -481,7 +492,7 @@ class App {
 
       // 4. If Auth Modal is open, close it
       if (this.authModal && this.authModal.isOpen()) {
-        this.authModal.close();
+        this.authModal.close(false);
         return;
       }
 

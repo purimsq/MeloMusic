@@ -200,6 +200,8 @@ assert(authService.includes('quickStartProfile'), 'authService provides quickSta
 assert(fs.existsSync(path.join(projectRoot, 'api/send-otp.js')), 'api/send-otp.js Vercel serverless function exists');
 assert(fs.existsSync(path.join(projectRoot, 'api/send-welcome.js')), 'api/send-welcome.js Vercel serverless function exists');
 assert(authModal.includes('${isOpen ? \'open\' : \'\'}'), 'authModal template keeps open state persistent across renders');
+assert(!authModal.includes('otp-helper-pill') && !authModal.includes('btn-quick-fill-otp'), 'authModal does NOT display OTP on screen (OTP is strictly private to email)');
+assert(mainJs.includes('alreadyOnboarded') && mainJs.includes("this.navigateTo('artist-select', false)"), 'main.js cleanly navigates forward to artist-select or home without history back collisions');
 
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);

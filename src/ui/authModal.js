@@ -182,13 +182,6 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
               <div style="display: flex; flex-direction: column; gap: 12px;">
                 <input type="text" class="input-field" id="auth-otp-input" placeholder="000000" maxlength="6" 
                        style="text-align: center; font-size: 28px; font-weight: 800; letter-spacing: 8px; font-family: monospace;" required autofocus />
-                
-                ${authService.pendingOtp?.code ? `
-                  <div class="otp-helper-pill">
-                    <span>Verification Code: <strong>${authService.pendingOtp.code}</strong></span>
-                    <button type="button" id="btn-quick-fill-otp" class="btn-fill-code">Fill Code</button>
-                  </div>
-                ` : ''}
 
                 <button type="submit" class="btn-black-pill" id="btn-auth-action" ${isLoading ? 'disabled' : ''}>
                   ${isLoading ? 'Verifying...' : 'Verify & Create Account'}
@@ -222,16 +215,16 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
   function bindEvents() {
     const sheet = container.querySelector('#auth-modal-sheet');
 
-    // Close Button
+    // Close Button (User manual dismissal)
     container.querySelector('#btn-close-auth')?.addEventListener('click', (e) => {
       e.preventDefault();
-      modalApi.close();
+      modalApi.close(true);
     });
 
-    // Backdrop Click: Only close when clicking the semi-transparent backdrop directly
+    // Backdrop Click: Only close when clicking the semi-transparent backdrop directly (User manual dismissal)
     sheet?.addEventListener('click', (e) => {
       if (e.target === sheet) {
-        modalApi.close();
+        modalApi.close(true);
       }
     });
 
@@ -345,16 +338,6 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
       const profile = await authService.quickStartProfile(formData.name || 'Guest Listener', formData.email);
       modalApi.close();
       if (onAuthSuccess) onAuthSuccess(profile);
-    });
-
-    // Quick Fill OTP
-    container.querySelector('#btn-quick-fill-otp')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      const otpInput = container.querySelector('#auth-otp-input');
-      if (otpInput && authService.pendingOtp?.code) {
-        otpInput.value = authService.pendingOtp.code;
-        otpInput.focus();
-      }
     });
 
     // Main Form Submit
@@ -513,10 +496,10 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
       showGoogleFallback = false;
       render();
     },
-    close() {
+    close(isDismissed = false) {
       isOpen = false;
       render();
-      if (onClose) onClose();
+      if (isDismissed && onClose) onClose();
     },
     isOpen() {
       return isOpen;
