@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import nodemailer from 'nodemailer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,7 +6,12 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const emailUser = env.EMAIL_USER || process.env.EMAIL_USER || '';
+  const emailPass = env.EMAIL_PASS || process.env.EMAIL_PASS || '';
+
+  return {
   server: {
     port: 5173,
     host: true
@@ -40,14 +45,14 @@ export default defineConfig({
               const transporter = nodemailer.createTransport({
                 service: 'gmail',
                 auth: {
-                  user: 'primemonexa@gmail.com',
-                  pass: 'hbbgiaavokfvjnxq'
+                  user: emailUser,
+                  pass: emailPass
                 }
               });
 
               // Branded luxury Melo verification email with official 3D logo
               const mailOptions = {
-                from: '"Melo Music" <primemonexa@gmail.com>',
+                from: `"Melo Music" <${emailUser}>`,
                 to: email,
                 subject: `${code} is your Melo verification code`,
                 attachments: [
@@ -124,8 +129,8 @@ export default defineConfig({
               const transporter = nodemailer.createTransport({
                 service: 'gmail',
                 auth: {
-                  user: 'primemonexa@gmail.com',
-                  pass: 'hbbgiaavokfvjnxq'
+                  user: emailUser,
+                  pass: emailPass
                 }
               });
 
@@ -163,7 +168,7 @@ export default defineConfig({
                 `;
 
               const mailOptions = {
-                from: '"Melo Music" <primemonexa@gmail.com>',
+                from: `"Melo Music" <${emailUser}>`,
                 to: email,
                 subject: `Welcome to Melo, ${name || 'Music Lover'} — Your High-Fidelity Sound Sanctuary Is Ready`,
                 attachments: [
@@ -391,4 +396,5 @@ export default defineConfig({
       }
     }
   ]
+};
 });

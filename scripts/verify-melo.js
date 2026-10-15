@@ -174,6 +174,21 @@ console.log('\n--- 17. Circular Progress Bar Transform & Audio Sync ---');
 assert(playerViewJs.includes('transform="rotate(-90'), 'playerView.js applies SVG rotate(-90) on orbit-progress-fill');
 assert(audioEngineJs.includes("this.notify('timeUpdate', {\n      currentTime: 0"), 'audioEngine.js resets timeUpdate to 0 on new track load');
 
+// 18. Environment Variables and Credentials Security
+console.log('\n--- 18. Environment Variables and Credentials Security ---');
+const gitignore = fs.readFileSync(path.join(projectRoot, '.gitignore'), 'utf8');
+assert(gitignore.includes('.env') && gitignore.includes('!.env.example'), '.gitignore ignores .env while allowing .env.example');
+assert(fs.existsSync(path.join(projectRoot, '.env.example')), '.env.example template file exists');
+
+const firebaseJs = fs.readFileSync(path.join(projectRoot, 'src/config/firebase.js'), 'utf8');
+assert(firebaseJs.includes('import.meta.env.VITE_FIREBASE_API_KEY'), 'firebase.js reads API key from import.meta.env.VITE_FIREBASE_API_KEY');
+assert(!firebaseJs.includes('AIzaSyCWsTjzGo1m4wk-dx2vrfcfFCrJZHkbAVE'), 'firebase.js contains NO hardcoded Firebase API keys');
+
+assert(viteConfig.includes("import { defineConfig, loadEnv } from 'vite'"), 'vite.config.js imports loadEnv from vite');
+assert(viteConfig.includes('const env = loadEnv(mode, process.cwd(), \'\')'), 'vite.config.js loads environment variables with loadEnv');
+assert(viteConfig.includes('env.EMAIL_USER') && viteConfig.includes('env.EMAIL_PASS'), 'vite.config.js reads EMAIL_USER and EMAIL_PASS from env');
+assert(!viteConfig.includes('hbbgiaavokfvjnxq'), 'vite.config.js contains NO hardcoded email app password');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);
