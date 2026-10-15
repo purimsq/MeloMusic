@@ -70,8 +70,8 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
               <span class="track-row-artist">
                 ${track.artist}
                 ${playlist.id === 'playlist-liked-songs' ? `
-                  • <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="pl-download-badge-${track.id}">
-                    ${isDownloaded ? '✓ Offline Ready' : '<div class="melo-mini-spinner"></div> Downloading...'}
+                  <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="pl-download-badge-${track.id}" title="${isDownloaded ? 'Downloaded for offline' : 'Downloading...'}">
+                    ${isDownloaded ? Icons.check(11) : '<div class="melo-mini-spinner"></div>'}
                   </span>
                 ` : ''}
               </span>
@@ -437,7 +437,8 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
     const badge = container.querySelector(`#pl-download-badge-${trackId}`);
     if (badge) {
       badge.className = 'download-status-badge downloaded';
-      badge.innerHTML = '✓ Offline Ready';
+      badge.title = 'Downloaded for offline';
+      badge.innerHTML = Icons.check(11);
     }
   });
 }

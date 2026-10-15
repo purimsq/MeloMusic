@@ -156,12 +156,13 @@ console.log('\n--- 14. Liked Songs Toast Feedback & Storage ---');
 assert(storage.includes("window.dispatchEvent(new CustomEvent('melo-toast'"), 'storage.js dispatches melo-toast on song like/unlike');
 assert(mainJs.includes("window.addEventListener('melo-toast'"), 'main.js listens to melo-toast event globally');
 
-// 15. Downloads Page: Downloading Spinner & Offline Ready Status
-console.log('\n--- 15. Downloads Page: Downloading Spinner & Live State ---');
+// 15. Downloads Page: Downloading Spinner & Clean Tick Indicator
+console.log('\n--- 15. Downloads Page: Downloading Spinner & Clean Tick Status ---');
 const libraryViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/libraryView.js'), 'utf8');
 assert(libraryViewJs.includes('download-status-badge'), 'libraryView.js includes download-status-badge');
 assert(libraryViewJs.includes('melo-mini-spinner'), 'libraryView.js shows melo-mini-spinner while track is downloading');
-assert(libraryViewJs.includes('Offline Ready'), 'libraryView.js shows Offline Ready when track download finishes');
+assert(libraryViewJs.includes('Icons.check(11)'), 'libraryView.js shows clean check icon instead of Offline Ready text');
+assert(!libraryViewJs.includes('✓ Offline Ready'), 'libraryView.js does not render verbose Offline Ready text');
 assert(libraryViewJs.includes("window.addEventListener('melo-download-complete'"), 'libraryView.js reacts to melo-download-complete event');
 
 // 16. Liked Songs Page / Modal Navigation from Metrics
@@ -237,6 +238,19 @@ assert(mainJs.includes("Melo unhandled rejection caught"), 'main.js catches unha
 const libViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/libraryView.js'), 'utf8');
 assert(!libViewJs.includes("alert('No audio files found in the chosen directory.')"), 'libraryView.js uses toasts instead of blocking alerts');
 assert(libViewJs.includes("switchTab('device')"), 'libraryView.js uses safe switchTab instead of destructive innerHTML reload');
+
+// 22. Native Lockscreen Player Carrier, Full Online Liked Songs & Clean Tick Status
+console.log('\n--- 22. Native Lockscreen Carrier & Full Online Liked Songs ---');
+const audioEngineCode = fs.readFileSync(path.join(projectRoot, 'src/services/audioEngine.js'), 'utf8');
+assert(audioEngineCode.includes('startSilentAudioCarrier'), 'audioEngine.js implements silent carrier for native phone lockscreen controls');
+assert(audioEngineCode.includes('stopSilentAudioCarrier'), 'audioEngine.js stops silent carrier on pause/ended');
+assert(audioEngineCode.includes('initVisibilityListener'), 'audioEngine.js listens to visibility change for background playback resilience');
+assert(audioEngineCode.includes('if (audioBlob && (!navigator.onLine || isDeviceTrack))'), 'audioEngine.js prevents 30s preview blob from overriding online full song');
+assert(storage.includes('resolvedYoutubeId'), 'storage.js preserves and resolves full YouTube stream ID when song is liked');
+
+const playlistViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/playlistView.js'), 'utf8');
+assert(playlistViewJs.includes('Icons.check(11)'), 'playlistView.js shows clean check icon on liked songs');
+assert(!playlistViewJs.includes('✓ Offline Ready'), 'playlistView.js does not render verbose Offline Ready text');
 
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);

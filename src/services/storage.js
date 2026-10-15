@@ -2,6 +2,7 @@
 import { get, set, del, entries } from 'idb-keyval';
 import { db } from '../config/firebase.js';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { musicSearchService } from './musicSearchService.js';
 
 const KEYS = {
   USER_PROFILE: 'melo_user_profile',
@@ -144,9 +145,14 @@ export const Storage = {
       }));
       return false; // unliked
     } else {
+      // Preserve youtubeId from track or active audio engine so liked songs play the full song
+      const activeTrack = typeof window !== 'undefined' ? window.audioEngine?.currentTrack : null;
+      const resolvedYoutubeId = track.youtubeId || (activeTrack?.id === track.id ? activeTrack.youtubeId : null);
+
       // Add to liked songs (starts as downloading)
       const likedTrack = {
         ...track,
+        youtubeId: resolvedYoutubeId || track.youtubeId || null,
         likedAt: Date.now(),
         isDownloaded: false
       };
@@ -163,6 +169,17 @@ export const Storage = {
       window.dispatchEvent(new CustomEvent('melo-liked-changed', {
         detail: { trackId: track.id, isLiked: true, track: likedTrack }
       }));
+
+      // Resolve YouTube master stream ID in background if missing so full song is always ready
+      if (!likedTrack.youtubeId && navigator.onLine) {
+        musicSearchService.resolveYouTubeVideoId(likedTrack).then(yId => {
+          if (yId) {
+            let cur = Storage.getLikedSongs();
+            cur = cur.map(t => t.id === likedTrack.id ? { ...t, youtubeId: yId } : t);
+            localStorage.setItem(KEYS.LIKED_SONGS, JSON.stringify(cur));
+          }
+        }).catch(() => {});
+      }
 
       // Asynchronously download audio into IndexedDB for offline zero-data playback
       this.downloadAudioForOffline(likedTrack);

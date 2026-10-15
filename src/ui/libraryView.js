@@ -186,9 +186,9 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
                   <div class="track-row-info">
                     <span class="track-row-title">${t.title}</span>
                     <span class="track-row-artist">
-                      ${t.artist} • 
-                      <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="download-badge-${t.id}">
-                        ${isDownloaded ? '✓ Offline Ready' : '<div class="melo-mini-spinner"></div> Downloading...'}
+                      ${t.artist}
+                      <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="download-badge-${t.id}" title="${isDownloaded ? 'Downloaded for offline' : 'Downloading...'}">
+                        ${isDownloaded ? Icons.check(11) : '<div class="melo-mini-spinner"></div>'}
                       </span>
                     </span>
                   </div>
@@ -667,7 +667,8 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
     const badge = container.querySelector(`#download-badge-${trackId}`);
     if (badge) {
       badge.className = 'download-status-badge downloaded';
-      badge.innerHTML = '✓ Offline Ready';
+      badge.title = 'Downloaded for offline';
+      badge.innerHTML = Icons.check(11);
     }
   });
 

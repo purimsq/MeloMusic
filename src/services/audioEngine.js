@@ -4,6 +4,9 @@ import { Storage } from './storage.js';
 import { LyricsEngine } from './lyricsService.js';
 import { musicSearchService } from './musicSearchService.js';
 
+// Continuous inaudible audio carrier keeps Android/iOS MediaSession active on lockscreen
+const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
 export class AudioEngine {
   constructor() {
     this.audio = new Audio();
@@ -55,6 +58,43 @@ export class AudioEngine {
 
     this.initAudioListeners();
     this.initYouTubePlayer();
+    this.initVisibilityListener();
+  }
+
+  initVisibilityListener() {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && this.isPlaying && this.currentMode === 'yt' && this.ytPlayer) {
+          try {
+            if (typeof this.ytPlayer.getPlayerState === 'function') {
+              const state = this.ytPlayer.getPlayerState();
+              if (state === window.YT?.PlayerState?.PAUSED) {
+                this.ytPlayer.playVideo();
+                this.startSilentAudioCarrier();
+              }
+            }
+          } catch (e) {}
+        }
+      });
+    }
+  }
+
+  startSilentAudioCarrier() {
+    try {
+      if (this.audio.src !== SILENT_AUDIO_URI) {
+        this.audio.src = SILENT_AUDIO_URI;
+        this.audio.loop = true;
+      }
+      this.audio.play().catch(() => {});
+    } catch (e) {}
+  }
+
+  stopSilentAudioCarrier() {
+    try {
+      if (this.audio.src === SILENT_AUDIO_URI) {
+        this.audio.pause();
+      }
+    } catch (e) {}
   }
 
   /**
@@ -169,12 +209,14 @@ export class AudioEngine {
       this.isPlaying = true;
       this.isLoadingTrack = false;
       this.startYouTubeProgressTracker();
+      this.startSilentAudioCarrier();
       this.updateMediaSessionPlaybackState('playing');
       this.notify('loadingChange', { isLoading: false, track: this.currentTrack });
       this.notify('playStateChange', { isPlaying: true });
     } else if (state === window.YT.PlayerState.PAUSED) {
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
+      this.stopSilentAudioCarrier();
       this.updateMediaSessionPlaybackState('paused');
       this.notify('playStateChange', { isPlaying: false });
     } else if (state === window.YT.PlayerState.BUFFERING) {
@@ -182,6 +224,7 @@ export class AudioEngine {
       this.notify('loadingChange', { isLoading: true, track: this.currentTrack });
     } else if (state === window.YT.PlayerState.ENDED) {
       this.stopYouTubeProgressTracker();
+      this.stopSilentAudioCarrier();
       this.handleTrackEnded();
     }
   }
@@ -439,18 +482,25 @@ export class AudioEngine {
 
   updateMediaSessionMetadata() {
     if ('mediaSession' in navigator && this.currentTrack) {
-      const coverUrl = this.currentTrack.cover || DEFAULT_FALLBACK_COVER;
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: this.currentTrack.title,
-        artist: this.currentTrack.artist,
-        album: this.currentTrack.album || 'Melo',
-        artwork: [
-          { src: coverUrl, sizes: '96x96', type: 'image/jpeg' },
-          { src: coverUrl, sizes: '128x128', type: 'image/jpeg' },
-          { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
-          { src: coverUrl, sizes: '512x512', type: 'image/jpeg' }
-        ]
-      });
+      let coverUrl = this.currentTrack.cover;
+      if (!coverUrl || coverUrl.startsWith('data:image/svg')) {
+        coverUrl = '/icons/logo.png';
+      }
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: this.currentTrack.title || 'Melo Track',
+          artist: this.currentTrack.artist || 'Melo Artist',
+          album: this.currentTrack.album || 'Melo',
+          artwork: [
+            { src: coverUrl, sizes: '96x96', type: 'image/jpeg' },
+            { src: coverUrl, sizes: '128x128', type: 'image/jpeg' },
+            { src: coverUrl, sizes: '256x256', type: 'image/jpeg' },
+            { src: coverUrl, sizes: '512x512', type: 'image/jpeg' }
+          ]
+        });
+      } catch (e) {
+        console.warn('Error setting MediaSession metadata', e);
+      }
     }
   }
 
@@ -502,12 +552,16 @@ export class AudioEngine {
     this.notify('trackChange', track);
 
     // 1. Check offline cached audio blob or device music file
+    // Device tracks (local MP3s) or offline playback use local blob
+    const isDeviceTrack = track.isDeviceMusic || track.source === 'device' || track.blob instanceof Blob;
     let audioBlob = track.blob;
-    if (!audioBlob) {
+    if (!audioBlob && (!navigator.onLine || isDeviceTrack)) {
       audioBlob = await Storage.getOfflineAudioBlob(track.id);
     }
 
-    if (audioBlob) {
+    // Only play cached audio blob if offline OR if it is a local device file.
+    // When online, ALWAYS stream the full master track from YouTube!
+    if (audioBlob && (!navigator.onLine || isDeviceTrack)) {
       this.currentMode = 'html5';
       this.stopYouTubeProgressTracker();
       if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
@@ -515,6 +569,7 @@ export class AudioEngine {
       }
 
       this.audio.src = URL.createObjectURL(audioBlob);
+      this.audio.loop = false;
       this.audio.load();
       if (autoPlay) this.play();
       return;
@@ -556,7 +611,7 @@ export class AudioEngine {
 
       if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
         this.currentMode = 'yt';
-        this.audio.pause();
+        this.startSilentAudioCarrier();
         this.ytPlayer.loadVideoById({
           videoId: youtubeId,
           startSeconds: 0
@@ -565,10 +620,13 @@ export class AudioEngine {
         if (autoPlay) {
           this.isPlaying = true;
           this.startYouTubeProgressTracker();
+          this.updateMediaSessionPlaybackState('playing');
         } else {
           setTimeout(() => {
             if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
               this.ytPlayer.pauseVideo();
+              this.stopSilentAudioCarrier();
+              this.updateMediaSessionPlaybackState('paused');
             }
           }, 100);
         }
@@ -585,6 +643,7 @@ export class AudioEngine {
           try { this.ytPlayer.pauseVideo(); } catch (e) {}
         }
         this.audio.src = track.audioUrl;
+        this.audio.loop = false;
         this.audio.load();
         if (autoPlay) this.play();
       } else {
@@ -614,8 +673,8 @@ export class AudioEngine {
     }
 
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
-      this.audio.pause();
       this.ytPlayer.playVideo();
+      this.startSilentAudioCarrier();
       this.isPlaying = true;
       this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
@@ -629,6 +688,7 @@ export class AudioEngine {
     }
 
     try {
+      this.audio.loop = false;
       await this.audio.play();
       this.isPlaying = true;
       this.startYouTubeProgressTracker();
@@ -642,6 +702,7 @@ export class AudioEngine {
   pause() {
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();
+      this.stopSilentAudioCarrier();
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('paused');
@@ -650,7 +711,10 @@ export class AudioEngine {
     }
 
     this.audio.pause();
+    this.isPlaying = false;
     this.stopYouTubeProgressTracker();
+    this.updateMediaSessionPlaybackState('paused');
+    this.notify('playStateChange', { isPlaying: false });
   }
 
   togglePlay() {
@@ -750,3 +814,6 @@ export class AudioEngine {
 }
 
 export const audioEngine = new AudioEngine();
+if (typeof window !== 'undefined') {
+  window.audioEngine = audioEngine;
+}
