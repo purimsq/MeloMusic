@@ -85,8 +85,9 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
   }
 
   function buildHtml() {
+    const isCurrentlyActive = container.querySelector('.view')?.classList.contains('active');
     return `
-      <div class="view view-library" id="view-library">
+      <div class="view view-library ${isCurrentlyActive ? 'active' : ''}" id="view-library">
         <!-- Pinned Top Header Container (Does NOT scroll) -->
         <div class="library-fixed-header">
           <!-- Top Section Header -->
@@ -385,9 +386,7 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
       }
 
       isScanningDevice = false;
-      activeTab = 'device';
-      container.innerHTML = buildHtml();
-      attachEvents();
+      switchTab('device');
     };
 
     // Scan Music Folder using File System Access API
@@ -429,9 +428,10 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
             await handleFiles(foundFiles);
           } else {
             isScanningDevice = false;
-            alert('No audio files found in the chosen directory.');
-            container.innerHTML = buildHtml();
-            attachEvents();
+            window.dispatchEvent(new CustomEvent('melo-toast', {
+              detail: { message: 'No audio files found in directory' }
+            }));
+            switchTab('device');
           }
           return;
         } catch (err) {

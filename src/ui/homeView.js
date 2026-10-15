@@ -7,7 +7,7 @@ import { generateCuratedMixes } from '../data/mixGenerator.js';
 import { networkService } from '../services/networkService.js';
 import { authService } from '../services/authService.js';
 
-export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPlaylist, onOpenEqualizer, onOpenPlayer, onOpenAuth }) {
+export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPlaylist, onOpenEqualizer, onOpenPlayer, onOpenAuth, onLogout }) {
   let userProfile = Storage.getUserProfile() || { name: 'Music Lover', email: 'guest@melomusic.app' };
   let favoriteArtistIds = Storage.getFavoriteArtists();
   let likedSongs = Storage.getLikedSongs();
@@ -54,11 +54,10 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
     const greeting = getGreeting();
     const initials = (userProfile.name || 'M')[0].toUpperCase();
     const isLoggedIn = !!(userProfile.isLoggedIn || authService.currentUser);
+    const isCurrentlyActive = container.querySelector('.view')?.classList.contains('active') ?? true;
 
     return `
-      <div class="view view-home" id="view-home">
-        <!-- Live Toast Notification (Network / Status) -->
-        <div id="home-toast-banner" class="home-toast-banner" style="display: none;"></div>
+      <div class="view view-home ${isCurrentlyActive ? 'active' : ''}" id="view-home">
 
         <!-- Top Bar with Dynamic User Profile & Live Internet Status -->
         <div class="home-top-bar">
@@ -359,12 +358,13 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
 
     // Logout
     container.querySelector('#btn-profile-logout')?.addEventListener('click', async () => {
-      await authService.logOut();
       profileSheet?.classList.remove('open');
-      showToast('Logged out successfully', true);
-      userProfile = Storage.getUserProfile();
-      container.innerHTML = buildHtml();
-      attachEvents();
+      if (onLogout) {
+        await onLogout();
+      } else {
+        await authService.logOut();
+        if (onOpenAuth) onOpenAuth();
+      }
     });
 
     // Sign in trigger
@@ -399,26 +399,16 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       if (onOpenEqualizer) onOpenEqualizer();
     });
 
-    // 2. Network Button Click -> Active Ping Verification
+    // 2. Network Button Click -> Safe Non-Destructive Status Feedback
     const netToggle = container.querySelector('#btn-toggle-network');
     if (netToggle) {
-      netToggle.addEventListener('click', async () => {
-        if (isCheckingNetwork) return;
-        isCheckingNetwork = true;
-        showToast('Testing internet throughput ping...', true);
-
-        const online = await networkService.verifyConnection();
-        isCheckingNetwork = false;
-        isOnline = online;
-
-        if (online) {
-          showToast('Active Internet Verified: High-speed streaming online', true);
-        } else {
-          showToast('No Internet Detected: Seamlessly running on offline vault', false);
-        }
-
-        container.innerHTML = buildHtml();
-        attachEvents();
+      netToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const online = networkService.isOnline;
+        window.dispatchEvent(new CustomEvent('melo-toast', {
+          detail: { message: online ? 'Online' : 'Offline' }
+        }));
       });
     }
 

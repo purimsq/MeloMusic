@@ -26,8 +26,9 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
   }
 
   function buildHtml() {
+    const isCurrentlyActive = container.querySelector('.view')?.classList.contains('active');
     return `
-      <div class="view view-search" id="view-search">
+      <div class="view view-search ${isCurrentlyActive ? 'active' : ''}" id="view-search">
         <!-- Pinned Top Header & Search Input (Does NOT scroll) -->
         <div class="search-fixed-header">
           <div class="home-section-header" style="margin-bottom: 0;">

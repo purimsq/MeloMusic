@@ -284,7 +284,20 @@ class App {
       onOpenPlayer: () => this.openPlayer(),
       onOpenAuth: () => {
         history.pushState({ modal: 'auth' }, '');
-        this.authModal.open('signup');
+        this.authModal.open('login');
+      },
+      onLogout: async () => {
+        try {
+          await authService.logOut();
+        } catch (e) {
+          console.warn('Logout note:', e);
+        }
+        audioEngine.pause();
+        this.closePlayer();
+        this.showToast('Signed out');
+        this.initHomeView();
+        history.pushState({ modal: 'auth' }, '');
+        this.authModal.open('login');
       }
     });
   }
@@ -759,6 +772,22 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+// Global Error Boundary & Resilience Guards (Never let minor errors white-screen the app)
+window.addEventListener('error', (event) => {
+  console.warn('Melo error boundary caught:', event.error || event.message);
+  // Ensure an active view remains visible
+  const activeView = document.querySelector('.view.active');
+  if (!activeView) {
+    const home = document.querySelector('#view-home');
+    if (home) home.classList.add('active');
+  }
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.warn('Melo unhandled rejection caught:', event.reason);
+  event.preventDefault();
+});
 
 // Initialize Application
 window.addEventListener('DOMContentLoaded', () => {

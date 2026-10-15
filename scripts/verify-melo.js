@@ -224,6 +224,20 @@ assert(styleCss.includes('toastBottomPop'), 'style.css animates bottom toast smo
 
 assert(storage.includes('Array.isArray(favs) && favs.length >= 3'), 'storage.js hasCompletedOnboarding acknowledges already saved favorite artists');
 
+// 21. Logout Session Expiry, Non-Destructive Click Safety & Error Boundaries
+console.log('\n--- 21. Logout Session Expiry, Click Safety & Error Boundaries ---');
+const homeViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/homeView.js'), 'utf8');
+assert(homeViewJs.includes('onLogout'), 'homeView.js accepts onLogout prop for clean session teardown');
+assert(!homeViewJs.includes("showToast('Testing internet throughput ping...'"), 'homeView.js network click does not trigger destructive DOM rebuilding');
+
+assert(mainJs.includes("this.authModal.open('login')"), 'main.js opens sign-in screen immediately on logout');
+assert(mainJs.includes("Melo error boundary caught"), 'main.js registers global error boundary to prevent white screens');
+assert(mainJs.includes("Melo unhandled rejection caught"), 'main.js catches unhandled promise rejections safely');
+
+const libViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/libraryView.js'), 'utf8');
+assert(!libViewJs.includes("alert('No audio files found in the chosen directory.')"), 'libraryView.js uses toasts instead of blocking alerts');
+assert(libViewJs.includes("switchTab('device')"), 'libraryView.js uses safe switchTab instead of destructive innerHTML reload');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);
