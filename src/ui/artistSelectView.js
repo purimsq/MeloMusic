@@ -6,7 +6,8 @@ import { musicSearchService } from '../services/musicSearchService.js';
 
 export function renderArtistSelectView(container, { onBack, onComplete }) {
   const MIN_ARTISTS = 3;
-  const savedFavorites = new Set(Storage.getFavoriteArtists());
+  // Always start empty so the app never auto-selects artists for the user!
+  const savedFavorites = new Set();
 
   // Combined artist catalog (starts with 24 real curated artists, dynamically appends searched artists)
   let allArtists = [...ARTISTS];
@@ -62,7 +63,7 @@ export function renderArtistSelectView(container, { onBack, onComplete }) {
             Please select at least 3 artists to continue
           </div>
 
-          <div class="selection-count-pill" id="selection-counter" style="${isReady ? 'background: #2E7D32; color: #FFF;' : ''}">
+          <div class="selection-count-pill" id="selection-counter" style="${isReady ? 'color: #1E7227;' : ''}">
             ${isReady
               ? `${savedFavorites.size} artists selected ✓`
               : savedFavorites.size === 0
@@ -90,8 +91,8 @@ export function renderArtistSelectView(container, { onBack, onComplete }) {
     if (counter) {
       if (isReady) {
         counter.textContent = `${savedFavorites.size} artists selected ✓`;
-        counter.style.background = '#2E7D32';
-        counter.style.color = '#FFF';
+        counter.style.background = 'transparent';
+        counter.style.color = '#1E7227';
       } else if (savedFavorites.size === 0) {
         counter.textContent = 'Select at least 3 artists (0/3)';
         counter.style.background = '';

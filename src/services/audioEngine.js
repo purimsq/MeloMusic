@@ -150,38 +150,48 @@ export class AudioEngine {
   startYouTubeProgressTracker() {
     this.stopYouTubeProgressTracker();
     this.ytProgressInterval = setInterval(() => {
-      if (!this.ytPlayer || typeof this.ytPlayer.getCurrentTime !== 'function') return;
-      try {
-        const time = this.ytPlayer.getCurrentTime() || 0;
-        const dur = this.ytPlayer.getDuration() || this.currentTrack?.duration || 0;
+      let time = 0;
+      let dur = this.duration || this.currentTrack?.duration || 0;
 
-        this.currentTime = time;
-        if (dur > 0) this.duration = dur;
+      if (this.currentMode === 'yt' && this.ytPlayer) {
+        try {
+          if (typeof this.ytPlayer.getCurrentTime === 'function') {
+            time = this.ytPlayer.getCurrentTime() || 0;
+            const ytDur = typeof this.ytPlayer.getDuration === 'function' ? this.ytPlayer.getDuration() : 0;
+            if (ytDur > 0) dur = ytDur;
+          }
+        } catch (e) {}
+      } else if (this.currentMode === 'html5' && this.audio) {
+        time = this.audio.currentTime || 0;
+        if (this.audio.duration > 0) dur = this.audio.duration;
+      }
 
-        const activeLyricIdx = this.lyricsEngine.getActiveIndex(this.currentTime);
+      this.currentTime = time;
+      if (dur > 0) this.duration = dur;
 
-        this.notify('timeUpdate', {
-          currentTime: this.currentTime,
-          duration: this.duration,
-          progress: this.duration > 0 ? this.currentTime / this.duration : 0
-        });
+      const activeLyricIdx = this.lyricsEngine.getActiveIndex(this.currentTime);
 
-        this.notify('lyricsUpdate', {
-          activeIndex: activeLyricIdx,
-          currentTime: this.currentTime
-        });
+      this.notify('timeUpdate', {
+        currentTime: this.currentTime,
+        duration: this.duration,
+        progress: this.duration > 0 ? this.currentTime / this.duration : 0
+      });
 
-        if ('mediaSession' in navigator && this.duration > 0) {
-          try {
-            navigator.mediaSession.setPositionState({
-              duration: this.duration,
-              playbackRate: 1,
-              position: this.currentTime
-            });
-          } catch (e) {}
-        }
-      } catch (e) {}
-    }, 250);
+      this.notify('lyricsUpdate', {
+        activeIndex: activeLyricIdx,
+        currentTime: this.currentTime
+      });
+
+      if ('mediaSession' in navigator && this.duration > 0) {
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: this.duration,
+            playbackRate: 1,
+            position: this.currentTime
+          });
+        } catch (e) {}
+      }
+    }, 200);
   }
 
   stopYouTubeProgressTracker() {
@@ -500,7 +510,10 @@ export class AudioEngine {
           startSeconds: 0
         });
 
-        if (!autoPlay) {
+        if (autoPlay) {
+          this.isPlaying = true;
+          this.startYouTubeProgressTracker();
+        } else {
           setTimeout(() => {
             if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
               this.ytPlayer.pauseVideo();
@@ -538,6 +551,7 @@ export class AudioEngine {
       this.audio.pause();
       this.ytPlayer.playVideo();
       this.isPlaying = true;
+      this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
       this.notify('playStateChange', { isPlaying: true });
       return;
@@ -559,12 +573,14 @@ export class AudioEngine {
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();
       this.isPlaying = false;
+      this.stopYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('paused');
       this.notify('playStateChange', { isPlaying: false });
       return;
     }
 
     this.audio.pause();
+    this.stopYouTubeProgressTracker();
   }
 
   togglePlay() {

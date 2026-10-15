@@ -67,22 +67,65 @@ export const SAMPLE_TRACKS = [
 [00:59.50] But if it's forever, it's even better`
   },
   {
-    id: 'sample-say-yes-to-heaven',
-    title: 'SAY YES TO HEAVEN',
-    artist: 'Lana Del Rey',
-    album: 'Did you know that there\'s a tunnel',
-    duration: 209, // 03:29
-    cover: 'https://i.scdn.co/image/ab67616d0000b27339794cb5c8a419ebfb617e40',
-    youtubeId: 'mETs3f9z6nE',
-    lyrics: `[00:00.00] If you dance I'll dance
-[00:08.50] And if you don't I'll dance anyway
-[00:17.20] Give peace a chance
-[00:25.80] Let the fear you have just fade away
-[00:34.50] Say yes to heaven
-[00:42.80] Say yes to me
-[00:51.20] Say yes to heaven
-[00:59.80] Say yes to me
-[01:08.50] If you go I'll go
-[01:17.20] And if you don't I'll go anyway`
+    id: 'sample-gods-plan',
+    title: "GOD'S PLAN",
+    artist: 'Drake',
+    album: 'Scorpion',
+    duration: 198, // 03:18
+    cover: 'https://i.scdn.co/image/ab67616d0000b273f907de96b9a4fbc5b86b3d18',
+    youtubeId: 'xpVfcZ0ZcFM',
+    lyrics: `[00:00.00] Yeah, they wishin' and wishin' and wishin' and wishin'
+[00:04.20] They wishin' on me, yeah
+[00:07.80] I been movin' calm, don't start no trouble with me
+[00:11.40] Tryna keep it peaceful is a struggle for me
+[00:15.20] Don't pull up at 6 AM to cuddle with me
+[00:19.00] You know how I like it when you lovin' on me
+[00:22.50] I don't wanna die for them to miss me
+[00:26.40] Yes, I see the things that they wishin' on me
+[00:30.20] Hope I got some brothers that outlive me
+[00:33.80] They gon' tell the story, shit was different with me
+[00:37.50] God's plan, God's plan
+[00:41.00] I hold back, sometimes I won't, yeah
+[00:44.80] I feel good, sometimes I don't, ayy, don't
+[00:48.50] I finessed down Weston Road, ayy, 'nessed
+[00:52.20] Might go down a G.O.A.T., yeah, wait`
+  },
+  {
+    id: 'sample-starboy',
+    title: 'STARBOY',
+    artist: 'The Weeknd feat. Daft Punk',
+    album: 'Starboy',
+    duration: 230, // 03:50
+    cover: 'https://i.scdn.co/image/ab67616d0000b2734718e2b124f79258be7bc452',
+    youtubeId: '34Na4j8AVgA',
+    lyrics: `[00:00.00] I'm tryna put you in the worst mood, ah
+[00:07.50] P1 cleaner than your church shoes, ah
+[00:11.20] Milli point two just to hurt you, ah
+[00:15.00] All red Lamb' just to tease you, ah
+[00:18.80] None of these toys on lease too, ah
+[00:22.50] Made your whole year in a week too, yah
+[00:26.20] Main bitch out your league too, ah
+[00:30.00] Side bitch out of your league too, ah
+[00:33.80] Look what you've done
+[00:37.50] I'm a motherfuckin' starboy
+[00:41.20] Look what you've done
+[00:45.00] I'm a motherfuckin' starboy`
+  },
+  {
+    id: 'sample-fein',
+    title: 'FE!N',
+    artist: 'Travis Scott feat. Playboi Carti',
+    album: 'UTOPIA',
+    duration: 191, // 03:11
+    cover: 'https://i.scdn.co/image/ab67616d0000b273e9e7fa56a642a8b98216b328',
+    youtubeId: 'B9synWjqBn8',
+    lyrics: `[00:00.00] Just come outside for the night
+[00:05.50] Take your time, get your light
+[00:10.20] Johnny Dang, huh, yeah
+[00:14.80] FE!N, FE!N, FE!N, FE!N, FE!N
+[00:22.50] FE!N, FE!N, FE!N, FE!N, FE!N
+[00:30.20] The career's more at stake when you in your prime
+[00:34.50] Fuck that paper, baby, my face on the line
+[00:38.20] FE!N, FE!N, FE!N, FE!N, FE!N`
   }
 ];

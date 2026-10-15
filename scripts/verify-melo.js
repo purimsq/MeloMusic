@@ -119,6 +119,35 @@ const styleCss = fs.readFileSync(path.join(projectRoot, 'src/style.css'), 'utf8'
 assert(styleCss.includes('.btn-circle-nav.offline-wifi'), 'style.css defines grey styling for offline-wifi');
 assert(styleCss.includes('.btn-circle-nav.online-wifi'), 'style.css defines active styling for online-wifi');
 
+// 10. Artist Selection: No Auto-Select & Text-Only Green on 3+
+console.log('\n--- 10. Artist Selection: No Auto-Select & Text-Only Green Pill ---');
+assert(artistSelectView.includes('const savedFavorites = new Set();'), 'artistSelectView always starts with 0 selected (no auto-selection)');
+assert(artistSelectView.includes("counter.style.background = 'transparent';"), 'selection counter pill background is transparent on 3+');
+assert(artistSelectView.includes("counter.style.color = '#1E7227';"), 'selection counter pill text turns green (#1E7227) on 3+');
+
+// 11. Replace Say Yes To Heaven with Playable Hit (God's Plan)
+console.log('\n--- 11. Sample Tracks: Replaced Say Yes To Heaven with Gods Plan ---');
+const samplesJs = fs.readFileSync(path.join(projectRoot, 'src/data/samples.js'), 'utf8');
+assert(!samplesJs.includes('sample-say-yes-to-heaven'), 'sample-say-yes-to-heaven removed from samples.js');
+assert(samplesJs.includes('sample-gods-plan'), 'sample-gods-plan added to samples.js');
+assert(samplesJs.includes('xpVfcZ0ZcFM'), 'Gods Plan has valid YouTube video ID xpVfcZ0ZcFM');
+
+// 12. Song Progress Bar Moving with Song
+console.log('\n--- 12. Song Progress Bar Tracking & Seeking ---');
+const playerViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/playerView.js'), 'utf8');
+assert(playerViewJs.includes('player-linear-bar-track'), 'playerView.js includes linear progress bar track');
+assert(playerViewJs.includes('player-linear-bar-fill'), 'playerView.js includes linear progress bar fill');
+assert(playerViewJs.includes('linearTrack.addEventListener(\'click\''), 'playerView.js supports clicking to seek on progress bar');
+assert(mainJs.includes('mini-progress-fill'), 'main.js includes mini-player progress fill');
+
+const audioEngineJs = fs.readFileSync(path.join(projectRoot, 'src/services/audioEngine.js'), 'utf8');
+assert(audioEngineJs.includes('this.startYouTubeProgressTracker()'), 'audioEngine.js starts progress tracker on play and load');
+assert(audioEngineJs.includes("this.notify('timeUpdate'"), 'audioEngine.js notifies timeUpdate event with currentTime and duration');
+
+// 13. Setup Loading View: No Auto-Inflating Unselected Artists
+console.log('\n--- 13. Setup Loading: Strictly User-Selected Artists ---');
+assert(!setupLoadingView.includes('selectedArtists = [...selectedArtists, ...remaining].slice(0, 7);'), 'setupLoadingView does not fill up with unselected artists');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);

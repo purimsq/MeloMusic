@@ -5,17 +5,17 @@ import { authService } from '../services/authService.js';
 
 export function renderSetupLoadingView(container, { onComplete }) {
   const favoriteArtistIds = Storage.getFavoriteArtists();
-  // Get top 6-7 selected artists (fallback to top world artists if none)
+  // Strictly display only the artists the user personally selected (no auto-selected extras)
   let selectedArtists = ARTISTS.filter(a => favoriteArtistIds.includes(a.id));
-  if (selectedArtists.length === 0) {
-    selectedArtists = ARTISTS.slice(0, 7);
-  } else if (selectedArtists.length < 6) {
-    // Fill up to 6 with popular artists
-    const remaining = ARTISTS.filter(a => !selectedArtists.some(s => s.id === a.id));
-    selectedArtists = [...selectedArtists, ...remaining].slice(0, 7);
-  } else {
-    selectedArtists = selectedArtists.slice(0, 7);
-  }
+  favoriteArtistIds.forEach(id => {
+    if (!selectedArtists.some(a => a.id === id)) {
+      selectedArtists.push({
+        id,
+        name: id.replace('art-', '').replace(/-/g, ' ').toUpperCase(),
+        photo: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80'
+      });
+    }
+  });
 
   container.innerHTML = `
     <div class="view view-setup-loading active" id="view-setup-loading">

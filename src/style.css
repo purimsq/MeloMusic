@@ -1377,6 +1377,68 @@ html, body {
   color: var(--accent-liked);
 }
 
+/* Linear Track Progress Bar */
+.player-linear-progress-section {
+  width: 100%;
+  padding: 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 6px 0;
+  flex-shrink: 0;
+}
+
+.player-linear-bar-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  transition: height 0.15s ease;
+}
+
+.player-linear-bar-track:hover {
+  height: 7px;
+}
+
+.player-linear-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-black);
+  border-radius: 6px;
+  pointer-events: none;
+  transition: width 0.1s linear;
+}
+
+.player-linear-bar-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 12px;
+  height: 12px;
+  background: var(--accent-black);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.player-linear-bar-track:hover .player-linear-bar-thumb {
+  opacity: 1;
+}
+
+.player-linear-timestamps {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .player-controls-bar {
   display: flex;
   align-items: center;
@@ -2392,6 +2454,26 @@ html, body {
   transform: translateY(140%);
   opacity: 0;
   pointer-events: none;
+}
+
+.mini-progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 2.5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mini-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-black);
+  border-radius: 2px;
+  transition: width 0.15s linear;
 }
 
 .mini-left {
