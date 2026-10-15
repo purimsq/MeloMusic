@@ -3,6 +3,34 @@ import { Icons } from './icons.js';
 import { authService } from '../services/authService.js';
 import { networkService } from '../services/networkService.js';
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+function evaluatePasswordStrength(password) {
+  if (!password) {
+    return { score: 0, label: 'Requires 8+ chars with uppercase, lowercase & numbers/symbols', level: 'empty' };
+  }
+
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password) || /[^A-Za-z0-9]/.test(password)) score++;
+
+  if (password.length < 8) {
+    return { score: 1, label: `Too short (${password.length}/8 characters)`, level: 'weak' };
+  }
+
+  if (score <= 2) {
+    return { score: 2, label: 'Weak — add uppercase, numbers, or symbols', level: 'weak' };
+  } else if (score === 3) {
+    return { score: 3, label: 'Medium strength — add a symbol or uppercase', level: 'medium' };
+  } else {
+    return { score: 4, label: 'Strong password ✓', level: 'strong' };
+  }
+}
+
 export function renderAuthModal(container, { onAuthSuccess }) {
   let mode = 'signup'; // 'signup' | 'login' | 'otp'
   let pendingEmail = '';
@@ -67,8 +95,22 @@ export function renderAuthModal(container, { onAuthSuccess }) {
           <form id="auth-main-form" class="auth-form-inputs">
             ${mode === 'signup' ? `
               <input type="text" class="input-field" id="auth-name-input" placeholder="Your Name" required />
-              <input type="email" class="input-field" id="auth-email-input" placeholder="Email Address" required />
-              <input type="password" class="input-field" id="auth-pass-input" placeholder="Password (min 6 characters)" minlength="6" required />
+              <input type="email" class="input-field" id="auth-email-input" placeholder="Email Address (e.g. name@example.com)" required />
+              <input type="password" class="input-field" id="auth-pass-input" placeholder="Create Strong Password (min 8 chars)" minlength="8" required />
+              
+              <!-- Real-time Password Strength Meter -->
+              <div class="password-strength-wrap" id="password-strength-wrap">
+                <div class="password-strength-bars">
+                  <div class="password-strength-bar" id="pass-bar-1"></div>
+                  <div class="password-strength-bar" id="pass-bar-2"></div>
+                  <div class="password-strength-bar" id="pass-bar-3"></div>
+                  <div class="password-strength-bar" id="pass-bar-4"></div>
+                </div>
+                <div class="password-strength-label" id="password-strength-label">
+                  Requires 8+ chars with uppercase, lowercase & numbers or symbols
+                </div>
+              </div>
+
               <button type="submit" class="btn-black-pill" id="btn-auth-action" ${isLoading ? 'disabled' : ''}>
                 ${isLoading ? 'Sending verification code...' : 'Continue with Email'}
               </button>
@@ -129,6 +171,35 @@ export function renderAuthModal(container, { onAuthSuccess }) {
       sheet?.classList.add('open');
     });
 
+    // Dynamic Live Password Strength updates (typing in sign-up)
+    const passInput = container.querySelector('#auth-pass-input');
+    if (mode === 'signup' && passInput) {
+      passInput.addEventListener('input', () => {
+        const val = passInput.value;
+        const { score, label, level } = evaluatePasswordStrength(val);
+        const labelEl = container.querySelector('#password-strength-label');
+        if (labelEl) {
+          labelEl.textContent = label;
+          labelEl.style.color = level === 'weak' ? '#E53935' : level === 'medium' ? '#FB8C00' : level === 'strong' ? '#2E7D32' : 'var(--text-secondary)';
+        }
+
+        const bars = [
+          container.querySelector('#pass-bar-1'),
+          container.querySelector('#pass-bar-2'),
+          container.querySelector('#pass-bar-3'),
+          container.querySelector('#pass-bar-4')
+        ];
+
+        bars.forEach((bar, index) => {
+          if (!bar) return;
+          bar.className = 'password-strength-bar';
+          if (index < score && val.length > 0) {
+            bar.classList.add(`active-${level}`);
+          }
+        });
+      });
+    }
+
     // Google Sign-In
     container.querySelector('#btn-auth-google')?.addEventListener('click', async () => {
       if (!networkService.isOnline && !navigator.onLine) {
@@ -172,7 +243,36 @@ export function renderAuthModal(container, { onAuthSuccess }) {
         const email = container.querySelector('#auth-email-input')?.value.trim();
         const pass = container.querySelector('#auth-pass-input')?.value;
 
-        if (!email || !pass) return;
+        // 1. Email format validation
+        if (!email) {
+          errorMessage = 'Please enter your email address.';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
+
+        if (!isValidEmail(email)) {
+          errorMessage = 'Please enter a valid email address (e.g. name@example.com).';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
+
+        // 2. Strong Password validation
+        if (!pass || pass.length < 8) {
+          errorMessage = 'Password must be at least 8 characters long.';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
+
+        const strength = evaluatePasswordStrength(pass);
+        if (strength.level === 'weak' || !/[A-Z]/.test(pass) || !/[a-z]/.test(pass) || !/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass)) {
+          errorMessage = 'Please choose a stronger password (must include uppercase, lowercase, and a number or symbol).';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
 
         try {
           isLoading = true;
@@ -221,6 +321,28 @@ export function renderAuthModal(container, { onAuthSuccess }) {
       } else if (mode === 'login') {
         const email = container.querySelector('#auth-email-input')?.value.trim();
         const pass = container.querySelector('#auth-pass-input')?.value;
+
+        // Email format validation on login
+        if (!email) {
+          errorMessage = 'Please enter your email address.';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
+
+        if (!isValidEmail(email)) {
+          errorMessage = 'Please enter a valid email address (e.g. name@example.com).';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
+
+        if (!pass) {
+          errorMessage = 'Please enter your password.';
+          render();
+          sheet?.classList.add('open');
+          return;
+        }
 
         try {
           isLoading = true;

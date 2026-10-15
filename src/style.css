@@ -3421,6 +3421,74 @@ body:has(.playlist-popup-backdrop.open) #floating-bottom-nav,
   object-fit: cover;
 }
 
+/* WiFi Network Status Indicator */
+.btn-circle-nav.online-wifi {
+  color: #111111;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
+}
+
+.btn-circle-nav.online-wifi svg {
+  stroke: #111111;
+}
+
+.btn-circle-nav.offline-wifi {
+  color: #8E8E93 !important;
+  background: rgba(142, 142, 147, 0.12) !important;
+  border-color: rgba(142, 142, 147, 0.25) !important;
+  transition: all 0.2s ease;
+}
+
+.btn-circle-nav.offline-wifi svg {
+  stroke: #8E8E93 !important;
+}
+
+/* Password Strength Meter */
+.password-strength-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: -4px 0 6px 0;
+  width: 100%;
+}
+
+.password-strength-bars {
+  display: flex;
+  gap: 4px;
+  height: 4px;
+  width: 100%;
+}
+
+.password-strength-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.08);
+  transition: background 0.2s ease;
+}
+
+.password-strength-bar.active-weak {
+  background: #E53935;
+}
+
+.password-strength-bar.active-medium {
+  background: #FB8C00;
+}
+
+.password-strength-bar.active-strong {
+  background: #2E7D32;
+}
+
+.password-strength-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* ==========================================================================
    USER PROFILE BOTTOM SHEET MODAL
    ========================================================================== */

@@ -96,6 +96,29 @@ assert(viteConfig.includes("cid: 'melologo'"), 'vite.config.js embeds Melo logo 
 assert(viteConfig.includes("server.middlewares.use('/api/send-welcome'"), 'vite.config.js has /api/send-welcome endpoint');
 assert(setupLoadingView.includes('authService.sendWelcomeEmail'), 'setupLoadingView dispatches onboarding welcome email');
 
+// 8. Password Strength & Email Format Validation
+console.log('\n--- 8. Password Strength & Email Format Validation ---');
+assert(authModal.includes('isValidEmail'), 'authModal contains isValidEmail validation regex');
+assert(authModal.includes('evaluatePasswordStrength'), 'authModal evaluates password strength');
+assert(authModal.includes('password-strength-bars'), 'authModal provides visual password strength meter');
+assert(authModal.includes('Password must be at least 8 characters'), 'authModal enforces min 8 character password');
+assert(authModal.includes('Please choose a stronger password'), 'authModal requires strong password combination on signup');
+assert(authModal.includes('Please enter a valid email address'), 'authModal enforces valid email format on signup and login');
+
+// 9. WiFi Signal Indicator (Online WiFi vs Offline Grey WifiOff)
+console.log('\n--- 9. Dynamic WiFi Signal Online / Offline Indicator ---');
+const iconsJs = fs.readFileSync(path.join(projectRoot, 'src/ui/icons.js'), 'utf8');
+assert(iconsJs.includes('wifi: (size = 18)'), 'icons.js has wifi icon');
+assert(iconsJs.includes('wifiOff: (size = 18)'), 'icons.js has wifiOff icon with strike-through line');
+
+const homeView = fs.readFileSync(path.join(projectRoot, 'src/ui/homeView.js'), 'utf8');
+assert(homeView.includes("isOnline ? Icons.wifi(18) : Icons.wifiOff(18)"), 'homeView renders Icons.wifi when online and Icons.wifiOff when offline');
+assert(homeView.includes("online-wifi' : 'offline-wifi"), 'homeView applies online-wifi or offline-wifi class');
+
+const styleCss = fs.readFileSync(path.join(projectRoot, 'src/style.css'), 'utf8');
+assert(styleCss.includes('.btn-circle-nav.offline-wifi'), 'style.css defines grey styling for offline-wifi');
+assert(styleCss.includes('.btn-circle-nav.online-wifi'), 'style.css defines active styling for online-wifi');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);

@@ -74,9 +74,9 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
 
           <div class="home-top-actions">
             <!-- Active Internet Connectivity Indicator -->
-            <button class="btn-circle-nav ${isOnline ? 'online-pulse' : 'offline-status'}" id="btn-toggle-network" 
-                    title="${isOnline ? 'Active Internet Verified (HTTP 204 ping OK)' : 'Offline Mode (Local Storage)'}">
-              ${isOnline ? `<span class="network-dot-live"></span>` : Icons.wifiOff(18)}
+            <button class="btn-circle-nav ${isOnline ? 'online-wifi' : 'offline-wifi'}" id="btn-toggle-network" 
+                    title="${isOnline ? 'Internet Connected (Wi-Fi Online)' : 'Offline (No Internet Connection)'}">
+              ${isOnline ? Icons.wifi(18) : Icons.wifiOff(18)}
             </button>
 
             <!-- 5-Band Equalizer & Sound Studio button -->
@@ -311,9 +311,9 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
       isOnline = netOnline;
       const netBtn = container.querySelector('#btn-toggle-network');
       if (netBtn) {
-        netBtn.className = `btn-circle-nav ${isOnline ? 'online-pulse' : 'offline-status'}`;
-        netBtn.innerHTML = isOnline ? `<span class="network-dot-live"></span>` : Icons.wifiOff(18);
-        netBtn.title = isOnline ? 'Active Internet Verified (HTTP 204 ping OK)' : 'Offline Mode (Local Storage)';
+        netBtn.className = `btn-circle-nav ${isOnline ? 'online-wifi' : 'offline-wifi'}`;
+        netBtn.innerHTML = isOnline ? Icons.wifi(18) : Icons.wifiOff(18);
+        netBtn.title = isOnline ? 'Internet Connected (Wi-Fi Online)' : 'Offline (No Internet Connection)';
       }
       const banner = container.querySelector('#offline-banner');
       if (banner) {
