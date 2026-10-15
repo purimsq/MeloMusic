@@ -209,7 +209,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
               <span class="metric-value">${userArtists.length || 6}</span>
               <span class="metric-label">Key Artists</span>
             </div>
-            <div class="metric-item">
+            <div class="metric-item" id="btn-metric-liked-songs" style="cursor: pointer;" title="Open Liked Songs">
               <span class="metric-value">${Storage.getLikedSongs().length}</span>
               <span class="metric-label">Liked Songs</span>
             </div>
@@ -259,7 +259,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
                 <span class="metric-value">${userArtists.length || 6}</span>
                 <span class="metric-label">Artists</span>
               </div>
-              <div class="metric-item">
+              <div class="metric-item" id="btn-profile-metric-liked" style="cursor: pointer;" title="Open Liked Songs">
                 <span class="metric-value">${Storage.getLikedSongs().length}</span>
                 <span class="metric-label">Liked & Saved</span>
               </div>
@@ -371,6 +371,26 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
     container.querySelector('#btn-profile-signin')?.addEventListener('click', () => {
       profileSheet?.classList.remove('open');
       if (onOpenAuth) onOpenAuth();
+    });
+
+    // Open Liked Songs from metrics
+    const openLikedSongsPage = () => {
+      const likedTracks = Storage.getLikedSongs();
+      if (onOpenPlaylist) {
+        onOpenPlaylist({
+          id: 'playlist-liked-songs',
+          title: 'Liked Songs',
+          description: `${likedTracks.length} tracks downloaded & available for offline listening`,
+          cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?auto=format&fit=crop&w=600&q=80',
+          tracks: likedTracks
+        });
+      }
+    };
+
+    container.querySelector('#btn-metric-liked-songs')?.addEventListener('click', openLikedSongsPage);
+    container.querySelector('#btn-profile-metric-liked')?.addEventListener('click', () => {
+      profileSheet?.classList.remove('open');
+      openLikedSongsPage();
     });
 
     // Equalizer from profile

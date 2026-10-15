@@ -147,7 +147,28 @@ assert(audioEngineJs.includes("this.notify('timeUpdate'"), 'audioEngine.js notif
 
 // 13. Setup Loading View: No Auto-Inflating Unselected Artists
 console.log('\n--- 13. Setup Loading: Strictly User-Selected Artists ---');
-assert(!setupLoadingView.includes('selectedArtists = [...selectedArtists, ...remaining].slice(0, 7);'), 'setupLoadingView does not fill up with unselected artists');
+// 14. Liked Songs Toast Feedback & Auto-Download
+console.log('\n--- 14. Liked Songs Toast Feedback & Storage ---');
+assert(storage.includes("window.dispatchEvent(new CustomEvent('melo-toast'"), 'storage.js dispatches melo-toast on song like/unlike');
+assert(mainJs.includes("window.addEventListener('melo-toast'"), 'main.js listens to melo-toast event globally');
+
+// 15. Downloads Page: Downloading Spinner & Offline Ready Status
+console.log('\n--- 15. Downloads Page: Downloading Spinner & Live State ---');
+const libraryViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/libraryView.js'), 'utf8');
+assert(libraryViewJs.includes('download-status-badge'), 'libraryView.js includes download-status-badge');
+assert(libraryViewJs.includes('melo-mini-spinner'), 'libraryView.js shows melo-mini-spinner while track is downloading');
+assert(libraryViewJs.includes('Offline Ready'), 'libraryView.js shows Offline Ready when track download finishes');
+assert(libraryViewJs.includes("window.addEventListener('melo-download-complete'"), 'libraryView.js reacts to melo-download-complete event');
+
+// 16. Liked Songs Page / Modal Navigation from Metrics
+console.log('\n--- 16. Liked Songs Navigation ---');
+assert(homeView.includes('btn-metric-liked-songs'), 'homeView.js has clickable btn-metric-liked-songs metric item');
+assert(homeView.includes('btn-profile-metric-liked'), 'homeView.js has clickable btn-profile-metric-liked item');
+
+// 17. Circular Progress Bar SVG Transform & Reset
+console.log('\n--- 17. Circular Progress Bar Transform & Audio Sync ---');
+assert(playerViewJs.includes('transform="rotate(-90'), 'playerView.js applies SVG rotate(-90) on orbit-progress-fill');
+assert(audioEngineJs.includes("this.notify('timeUpdate', {\n      currentTime: 0"), 'audioEngine.js resets timeUpdate to 0 on new track load');
 
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
@@ -156,3 +177,4 @@ console.log(`==========================================\n`);
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+

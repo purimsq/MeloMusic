@@ -47,11 +47,13 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
           <!-- Background Orbit Circle Track -->
           <circle cx="${CX}" cy="${CY}" r="${R}" class="orbit-track-circle" />
 
-          <!-- Filled Progress Circle Arc -->
-          <circle id="orbit-progress-fill" cx="${CX}" cy="${CY}" r="${R}" class="orbit-progress-circle-fill" />
+          <!-- Filled Progress Circle Arc (Starts at 12 o'clock via SVG transform) -->
+          <circle id="orbit-progress-fill" cx="${CX}" cy="${CY}" r="${R}" 
+                  stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}"
+                  transform="rotate(-90 ${CX} ${CY})" class="orbit-progress-circle-fill" />
 
           <!-- Orbit Playhead Scrubber Dot -->
-          <circle id="orbit-scrubber-dot" cx="${CX}" cy="${CY - R}" r="5" class="orbit-progress-dot" />
+          <circle id="orbit-scrubber-dot" cx="${CX}" cy="${CY - R}" r="6.5" class="orbit-progress-dot" />
         </svg>
 
         <!-- 8-Lobe Scalloped Floral Mask Artwork -->
@@ -121,37 +123,46 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
   const shuffleBtn = container.querySelector('#btn-player-shuffle');
   const lyricsBtn = container.querySelector('#btn-top-lyrics');
 
-  // Setup circle dash array for progress stroke
-  progressFill.style.strokeDasharray = circumference;
-  progressFill.style.strokeDashoffset = circumference;
-
   let isSeeking = false;
   let wasPlayingBeforeSeek = false;
   let currentProgressRatio = 0;
 
-  // Initialize circular scrubber if already playing
-  if (audioEngine.duration > 0) {
-    updateCircleScrubber(audioEngine.currentTime / audioEngine.duration);
+  // Setup circle dash array for progress stroke
+  if (progressFill) {
+    progressFill.style.strokeDasharray = `${circumference}`;
+    progressFill.style.strokeDashoffset = `${circumference}`;
   }
 
   // Updates Scrubber position around circular orbit
   function updateCircleScrubber(progress) {
-    currentProgressRatio = progress;
-    const angle = progress * 2 * Math.PI - Math.PI / 2;
+    if (!orbitDot || !progressFill) return;
+    const safeProg = isNaN(progress) ? 0 : Math.max(0, Math.min(progress, 1));
+    currentProgressRatio = safeProg;
+
+    const angle = safeProg * 2 * Math.PI - Math.PI / 2;
     const x = CX + R * Math.cos(angle);
     const y = CY + R * Math.sin(angle);
 
     orbitDot.setAttribute('cx', x.toFixed(2));
     orbitDot.setAttribute('cy', y.toFixed(2));
 
-    const offset = circumference * (1 - Math.max(0, Math.min(progress, 1)));
+    const offset = circumference * (1 - safeProg);
     progressFill.style.strokeDashoffset = offset.toFixed(1);
+  }
+
+  // Initialize circular scrubber immediately
+  if (audioEngine.duration > 0 && audioEngine.currentTime > 0) {
+    updateCircleScrubber(audioEngine.currentTime / audioEngine.duration);
+  } else {
+    updateCircleScrubber(0);
   }
 
   // Audio Engine Time Updates
   audioEngine.subscribe('timeUpdate', ({ currentTime, duration, progress }) => {
     if (!isSeeking) {
-      timeDisplay.innerHTML = `${formatTime(currentTime)} <span>|</span> ${formatTime(duration)}`;
+      const cur = isNaN(currentTime) ? 0 : currentTime;
+      const dur = isNaN(duration) ? (audioEngine.currentTrack?.duration || 0) : duration;
+      timeDisplay.innerHTML = `${formatTime(cur)} <span>|</span> ${formatTime(dur)}`;
       updateCircleScrubber(progress);
     }
   });
@@ -166,7 +177,10 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
       playPauseBtn.innerHTML = `<div class="melo-btn-spinner"></div>`;
     } else {
       playPauseBtn.innerHTML = audioEngine.isPlaying ? Icons.pause(26) : Icons.play(26);
-      timeDisplay.innerHTML = `${formatTime(audioEngine.currentTime)} <span>|</span> ${formatTime(audioEngine.duration)}`;
+      timeDisplay.innerHTML = `${formatTime(audioEngine.currentTime)} <span>|</span> ${formatTime(audioEngine.duration || audioEngine.currentTrack?.duration || 0)}`;
+      if (audioEngine.duration > 0) {
+        updateCircleScrubber(audioEngine.currentTime / audioEngine.duration);
+      }
     }
   });
 
@@ -174,6 +188,8 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     trackTitle.textContent = track.title;
     artistName.textContent = track.artist;
     coverImg.src = track.cover || DEFAULT_FALLBACK_COVER;
+    timeDisplay.innerHTML = `00:00 <span>|</span> ${formatTime(track.duration || 0)}`;
+    updateCircleScrubber(0);
     const isNowLiked = Storage.isSongLiked(track.id);
     heartBtn.className = `btn-heart-convenient ${isNowLiked ? 'liked' : ''}`;
     heartBtn.innerHTML = Icons.heart(24, isNowLiked);

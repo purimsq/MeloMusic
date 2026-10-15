@@ -212,6 +212,13 @@ class App {
       }
     });
 
+    // Global Toast Event Listener
+    window.addEventListener('melo-toast', (e) => {
+      if (e.detail && e.detail.message) {
+        this.showToast(e.detail.message, e.detail.isSuccess !== false);
+      }
+    });
+
     // Monitor Network Connectivity changes globally
     networkService.subscribe(({ isOnline }) => {
       if (!isOnline) {

@@ -54,6 +54,7 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
     return tracks.map((track, i) => {
       const isCurrent = track.id === currentTrackId;
       const isLiked = Storage.isSongLiked(track.id);
+      const isDownloaded = track.isDownloaded === true;
 
       return `
         <div class="playlist-track-row ${isCurrent ? 'playing' : ''}" data-track-id="${track.id}" data-index="${i}">
@@ -66,7 +67,14 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
             <img src="${track.cover || DEFAULT_FALLBACK_COVER}" alt="${track.title}" class="track-row-thumb" />
             <div class="track-row-details">
               <span class="track-row-title ${isCurrent ? 'active' : ''}">${track.title}</span>
-              <span class="track-row-artist">${track.artist}</span>
+              <span class="track-row-artist">
+                ${track.artist}
+                ${playlist.id === 'playlist-liked-songs' ? `
+                  • <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="pl-download-badge-${track.id}">
+                    ${isDownloaded ? '✓ Offline Ready' : '<div class="melo-mini-spinner"></div> Downloading...'}
+                  </span>
+                ` : ''}
+              </span>
             </div>
           </div>
 
@@ -422,4 +430,14 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
   // Initial render: render full playlist content immediately with zero white screen delay
   container.innerHTML = renderFullContent();
   attachFullEvents();
+
+  window.addEventListener('melo-download-complete', (e) => {
+    const trackId = e.detail?.trackId;
+    if (!trackId) return;
+    const badge = container.querySelector(`#pl-download-badge-${trackId}`);
+    if (badge) {
+      badge.className = 'download-status-badge downloaded';
+      badge.innerHTML = '✓ Offline Ready';
+    }
+  });
 }

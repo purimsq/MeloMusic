@@ -61,7 +61,14 @@ export class AudioEngine {
    * Initializes YouTube IFrame API for background ad-free streaming
    */
   initYouTubePlayer() {
-    return new Promise((resolve) => {
+    if (this.ytReady && this.ytPlayer) {
+      return Promise.resolve(this.ytPlayer);
+    }
+    if (this.ytPlayerPromise) {
+      return this.ytPlayerPromise;
+    }
+
+    this.ytPlayerPromise = new Promise((resolve) => {
       const init = () => {
         if (!window.YT || !window.YT.Player) {
           setTimeout(init, 150);
@@ -436,6 +443,15 @@ export class AudioEngine {
   async loadTrack(track, autoPlay = true) {
     if (!track) return;
     this.currentTrack = track;
+    this.currentTime = 0;
+    this.duration = track.duration || 0;
+
+    // Reset progress to 0 for new track immediately
+    this.notify('timeUpdate', {
+      currentTime: 0,
+      duration: this.duration,
+      progress: 0
+    });
 
     // Synchronize queue index with active track
     const existingIndex = this.queue.findIndex(t => t.id === track.id);
@@ -564,6 +580,10 @@ export class AudioEngine {
 
     try {
       await this.audio.play();
+      this.isPlaying = true;
+      this.startYouTubeProgressTracker();
+      this.updateMediaSessionPlaybackState('playing');
+      this.notify('playStateChange', { isPlaying: true });
     } catch (e) {
       console.warn('Playback error', e);
     }

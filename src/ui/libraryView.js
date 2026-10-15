@@ -177,13 +177,19 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
         <div class="vertical-track-list">
           ${filtered.map(t => {
             const isPlaying = audioEngine?.currentTrack?.id === t.id && audioEngine?.isPlaying;
+            const isDownloaded = t.isDownloaded === true;
             return `
               <div class="track-row-item ${audioEngine?.currentTrack?.id === t.id ? 'playing' : ''}" data-id="${t.id}">
                 <div class="track-row-left">
                   <img class="track-row-thumb" src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" />
                   <div class="track-row-info">
                     <span class="track-row-title">${t.title}</span>
-                    <span class="track-row-artist">${t.artist} • <span style="color: #4CAF50; font-weight: 700;">Offline Ready</span></span>
+                    <span class="track-row-artist">
+                      ${t.artist} • 
+                      <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="download-badge-${t.id}">
+                        ${isDownloaded ? '✓ Offline Ready' : '<div class="melo-mini-spinner"></div> Downloading...'}
+                      </span>
+                    </span>
                   </div>
                 </div>
 
@@ -653,4 +659,25 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
 
   container.innerHTML = buildHtml();
   attachEvents();
+
+  // Reactive listeners for background downloads & like state changes
+  window.addEventListener('melo-download-complete', (e) => {
+    const trackId = e.detail?.trackId;
+    if (!trackId) return;
+    const badge = container.querySelector(`#download-badge-${trackId}`);
+    if (badge) {
+      badge.className = 'download-status-badge downloaded';
+      badge.innerHTML = '✓ Offline Ready';
+    }
+  });
+
+  window.addEventListener('melo-liked-changed', () => {
+    if (activeTab === 'liked') {
+      const body = container.querySelector('#lib-content-body');
+      if (body) {
+        body.innerHTML = renderTabContent();
+        attachContentEvents();
+      }
+    }
+  });
 }

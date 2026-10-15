@@ -117,9 +117,20 @@ export const Storage = {
         await del(`${KEYS.OFFLINE_AUDIO_PREFIX}${track.id}`);
       } catch (e) {}
       this.syncUserDataToCloud();
+
+      // Dispatch global toast feedback & liked changed event
+      window.dispatchEvent(new CustomEvent('melo-toast', {
+        detail: {
+          message: `Removed "${track.title}" from Liked Songs`,
+          isSuccess: false
+        }
+      }));
+      window.dispatchEvent(new CustomEvent('melo-liked-changed', {
+        detail: { trackId: track.id, isLiked: false }
+      }));
       return false; // unliked
     } else {
-      // Add to liked songs
+      // Add to liked songs (starts as downloading)
       const likedTrack = {
         ...track,
         likedAt: Date.now(),
@@ -127,6 +138,17 @@ export const Storage = {
       };
       list.unshift(likedTrack);
       localStorage.setItem(KEYS.LIKED_SONGS, JSON.stringify(list));
+
+      // Dispatch immediate toast feedback
+      window.dispatchEvent(new CustomEvent('melo-toast', {
+        detail: {
+          message: `❤️ Saved "${track.title}" to Liked Songs (Downloading for offline...)`,
+          isSuccess: true
+        }
+      }));
+      window.dispatchEvent(new CustomEvent('melo-liked-changed', {
+        detail: { trackId: track.id, isLiked: true, track: likedTrack }
+      }));
 
       // Asynchronously download audio into IndexedDB for offline zero-data playback
       this.downloadAudioForOffline(likedTrack);
@@ -183,6 +205,11 @@ export const Storage = {
         let list = this.getLikedSongs();
         list = list.map(t => t.id === track.id ? { ...t, isDownloaded: true, audioUrl: audioUrl || t.audioUrl } : t);
         localStorage.setItem(KEYS.LIKED_SONGS, JSON.stringify(list));
+
+        // Notify UI that download is finished
+        window.dispatchEvent(new CustomEvent('melo-download-complete', {
+          detail: { trackId: track.id, track }
+        }));
         return true;
       }
       return false;
