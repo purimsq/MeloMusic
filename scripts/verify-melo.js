@@ -195,8 +195,7 @@ assert(iconsJs.includes('eye: (size = 20)') && iconsJs.includes('eyeOff: (size =
 assert(authModal.includes('btn-toggle-password'), 'authModal provides password visibility toggle button with eye icon');
 assert(authModal.includes('password-input-wrap'), 'authModal wraps password input in password-input-wrap');
 assert(authModal.includes('google-fallback-box'), 'authModal provides Google auth and account not found fallback');
-assert(authModal.includes('btn-guest-pass'), 'authModal provides instant guest / demo access for zero friction');
-assert(authService.includes('quickStartProfile'), 'authService provides quickStartProfile method for seamless fallback');
+assert(!authModal.includes('btn-guest-pass'), 'authModal eliminates guest testing mode bypass');
 assert(fs.existsSync(path.join(projectRoot, 'api/send-otp.js')), 'api/send-otp.js Vercel serverless function exists');
 assert(fs.existsSync(path.join(projectRoot, 'api/send-welcome.js')), 'api/send-welcome.js Vercel serverless function exists');
 assert(authModal.includes('${isOpen ? \'open\' : \'\'}'), 'authModal template keeps open state persistent across renders');
@@ -229,8 +228,9 @@ console.log('\n--- 21. Logout Session Expiry, Click Safety & Error Boundaries --
 const homeViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/homeView.js'), 'utf8');
 assert(homeViewJs.includes('onLogout'), 'homeView.js accepts onLogout prop for clean session teardown');
 assert(!homeViewJs.includes("showToast('Testing internet throughput ping...'"), 'homeView.js network click does not trigger destructive DOM rebuilding');
-
-assert(mainJs.includes("this.authModal.open('login')"), 'main.js opens sign-in screen immediately on logout');
+assert(!homeViewJs.includes('Testing Mode Active'), 'homeView.js has removed all Testing Mode Active labels');
+assert(storage.includes('clearSession'), 'storage.js includes clearSession method for thorough logout cleanup');
+assert(mainJs.includes("this.authModal.open('signup')"), 'main.js directs unauthenticated users directly to sign up');
 assert(mainJs.includes("Melo error boundary caught"), 'main.js registers global error boundary to prevent white screens');
 assert(mainJs.includes("Melo unhandled rejection caught"), 'main.js catches unhandled promise rejections safely');
 

@@ -242,11 +242,11 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
                 ${userProfile.photoURL ? `<img src="${userProfile.photoURL}" alt="${userProfile.name}" class="user-avatar-img" />` : initials}
               </div>
               <div style="display: flex; flex-direction: column; overflow: hidden;">
-                <h4 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.name || 'Music Lover'}</h4>
-                <span style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.email || 'Testing Session'}</span>
+                <h4 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.name || 'Melo Listener'}</h4>
+                <span style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.email || 'Melo Account'}</span>
                 <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;">
                   <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #2E7D32; background: rgba(46, 125, 50, 0.1); padding: 2px 8px; border-radius: 8px;">
-                    ${Icons.check(12)} ${isLoggedIn ? 'Firebase Cloud Account' : 'Testing Mode Active'}
+                    ${Icons.check(12)} Authenticated Account
                   </span>
                 </div>
               </div>

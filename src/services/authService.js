@@ -307,11 +307,14 @@ class AuthService {
    * Log Out
    */
   async logOut() {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('SignOut note:', e);
+    }
     this.currentUser = null;
     this.userProfile = null;
-    Storage.setUserProfile({ name: 'Music Lover', isLoggedIn: false });
-    Storage.setCompletedOnboarding(false);
+    Storage.clearSession();
     this.notifyListeners();
   }
 

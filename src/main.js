@@ -256,14 +256,19 @@ class App {
       }
     });
 
-    // Spotify-style One-Time Onboarding:
-    // If onboarding was already completed or user has 3+ artists, open straight to Home dashboard!
-    if (Storage.hasCompletedOnboarding() || Storage.getFavoriteArtists().length >= 3) {
-      Storage.setCompletedOnboarding(true);
+    // Strict Account Authentication Guard:
+    // User MUST have an authenticated account and completed onboarding to access Home.
+    // If not logged in / has no account -> ALWAYS direct to Onboarding & Sign Up!
+    const profile = Storage.getUserProfile();
+    const hasAccount = profile && profile.isLoggedIn;
+
+    if (hasAccount && Storage.hasCompletedOnboarding()) {
       this.initHomeView();
       this.transitionToHome();
     } else {
+      Storage.clearSession();
       this.navigateTo('onboarding', false);
+      this.authModal.open('signup');
     }
   }
 
@@ -295,9 +300,8 @@ class App {
         audioEngine.pause();
         this.closePlayer();
         this.showToast('Signed out');
-        this.initHomeView();
-        history.pushState({ modal: 'auth' }, '');
-        this.authModal.open('login');
+        this.navigateTo('onboarding', false);
+        this.authModal.open('signup');
       }
     });
   }

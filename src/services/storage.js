@@ -18,9 +18,9 @@ export const Storage = {
   getUserProfile() {
     try {
       const data = localStorage.getItem(KEYS.USER_PROFILE);
-      return data ? JSON.parse(data) : { name: 'Music Lover', isLoggedIn: false };
+      return data ? JSON.parse(data) : { name: '', isLoggedIn: false };
     } catch (e) {
-      return { name: 'Music Lover', isLoggedIn: false };
+      return { name: '', isLoggedIn: false };
     }
   },
 
@@ -32,9 +32,23 @@ export const Storage = {
     }
   },
 
-  // --- ONBOARDING COMPLETION (One-Time like Spotify) ---
+  clearSession() {
+    try {
+      localStorage.removeItem(KEYS.USER_PROFILE);
+      localStorage.removeItem(KEYS.FAVORITE_ARTISTS);
+      localStorage.removeItem('melo_onboarding_completed');
+    } catch (e) {
+      console.error('Failed to clear session', e);
+    }
+  },
+
+  // --- ONBOARDING COMPLETION (Strict: requires authenticated account) ---
   hasCompletedOnboarding() {
     try {
+      const profile = this.getUserProfile();
+      if (!profile || !profile.isLoggedIn) {
+        return false;
+      }
       const completed = localStorage.getItem('melo_onboarding_completed') === 'true';
       const favs = this.getFavoriteArtists();
       return completed || (Array.isArray(favs) && favs.length >= 3);

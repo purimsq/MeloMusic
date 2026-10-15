@@ -110,18 +110,15 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
             ${showGoogleFallback ? `
               <div class="google-fallback-box">
                 <div style="font-size: 13px; font-weight: 700; color: #111111; margin-bottom: 4px;">
-                  ⚡ Quick Access Fallback
+                  Account Access
                 </div>
                 <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.45;">
                   ${fallbackType === 'no-account'
-                    ? 'No registered account was found with this email. Tap below to create your account now:'
-                    : 'Google Sign-In was blocked or encountered an environment restriction. Tap below for instant sound access:'}
+                    ? 'No registered account was found with this email. Please sign up below:'
+                    : 'Google Sign-In was blocked by your browser. Please create your account with email below:'}
                 </p>
                 <button type="button" class="btn-black-pill" id="btn-quick-fallback" style="padding: 10px 18px; font-size: 13px; margin-bottom: 6px;">
-                  ${fallbackType === 'no-account' ? 'Create Account Now' : '⚡ Continue with Instant Sound Access'}
-                </button>
-                <button type="button" class="login-text-link" id="btn-switch-to-signup" style="font-size: 12px; text-decoration: underline;">
-                  ${mode === 'login' ? 'Or switch to standard Sign Up' : 'Or continue with email below'}
+                  Create Account with Email
                 </button>
               </div>
             ` : ''}
@@ -199,9 +196,6 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
             ${mode !== 'otp' ? `
               <button type="button" class="login-text-link" id="btn-toggle-mode">
                 ${mode === 'signup' ? 'Already have an account? <strong>Log In</strong>' : "Don't have an account? <strong>Sign Up</strong>"}
-              </button>
-              <button type="button" class="login-text-link" id="btn-guest-pass" style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">
-                ⚡ Explore as Guest (Instant Access)
               </button>
             ` : ''}
           </div>
@@ -310,34 +304,14 @@ export function renderAuthModal(container, { onAuthSuccess, onClose } = {}) {
       }
     });
 
-    // Quick Fallback Button (Google Fallback or No Account Fallback)
-    container.querySelector('#btn-quick-fallback')?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      saveInputValues();
-      const name = formData.name || 'Music Lover';
-      const email = formData.email;
-      const profile = await authService.quickStartProfile(name, email);
-      modalApi.close();
-      if (onAuthSuccess) onAuthSuccess(profile);
-    });
-
-    // Switch to Sign Up from Fallback
-    container.querySelector('#btn-switch-to-signup')?.addEventListener('click', (e) => {
+    // Quick Fallback Button (Switches cleanly to Email Sign Up)
+    container.querySelector('#btn-quick-fallback')?.addEventListener('click', (e) => {
       e.preventDefault();
       saveInputValues();
       mode = 'signup';
       errorMessage = '';
       showGoogleFallback = false;
       render();
-    });
-
-    // Guest Pass (Instant Access)
-    container.querySelector('#btn-guest-pass')?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      saveInputValues();
-      const profile = await authService.quickStartProfile(formData.name || 'Guest Listener', formData.email);
-      modalApi.close();
-      if (onAuthSuccess) onAuthSuccess(profile);
     });
 
     // Main Form Submit
