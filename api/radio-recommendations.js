@@ -9,6 +9,9 @@ export default async function handler(req, res) {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const artist = req.query?.artist || url.searchParams.get('artist');
     const title = req.query?.title || url.searchParams.get('title') || '';
+    const excludeRaw = req.query?.exclude || url.searchParams.get('exclude') || '';
+    const excluded = new Set(excludeRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
+    if (title) excluded.add(title.trim().toUpperCase());
 
     if (!artist) {
       return res.status(400).json({ error: 'Missing artist parameter' });
@@ -26,8 +29,8 @@ export default async function handler(req, res) {
 
     // 2. Fetch related artists (multi-artist vibe matching like YouTube Music Radio)
     const [relRes, mainTopRes] = await Promise.all([
-      fetch(`https://api.deezer.com/artist/${mainArtist.id}/related?limit=8`),
-      fetch(`https://api.deezer.com/artist/${mainArtist.id}/top?limit=3`)
+      fetch(`https://api.deezer.com/artist/${mainArtist.id}/related?limit=15`),
+      fetch(`https://api.deezer.com/artist/${mainArtist.id}/top?limit=5`)
     ]);
 
     const relData = relRes.ok ? await relRes.json() : { data: [] };
@@ -37,16 +40,18 @@ export default async function handler(req, res) {
     const mainTopTracks = mainTopData.data || [];
 
     // 3. For each related artist, fetch their #1 top song
-    const queuePromises = relatedArtists.slice(0, 7).map(async (a) => {
+    const queuePromises = relatedArtists.slice(0, 12).map(async (a) => {
       try {
         const topRes = await fetch(`https://api.deezer.com/artist/${a.id}/top?limit=1`);
         if (!topRes.ok) return null;
         const topData = await topRes.json();
         const track = topData.data?.[0];
         if (track) {
+          const upperTitle = (track.title || '').toUpperCase();
+          if (excluded.has(upperTitle)) return null;
           return {
             id: `radio-rec-${track.id}`,
-            title: track.title.toUpperCase(),
+            title: upperTitle,
             artist: track.artist?.name || a.name,
             album: track.album?.title || 'Up Next Radio',
             duration: track.duration || 210,
@@ -61,10 +66,10 @@ export default async function handler(req, res) {
 
     const relatedTracks = (await Promise.all(queuePromises)).filter(Boolean);
 
-    // Filter main artist top tracks so we don't duplicate the currently playing title
+    // Filter main artist top tracks so we don't duplicate excluded songs
     const mainTracks = mainTopTracks
-      .filter(t => !title || !t.title.toLowerCase().includes(title.toLowerCase()))
-      .slice(0, 2)
+      .filter(t => !excluded.has((t.title || '').toUpperCase()))
+      .slice(0, 3)
       .map(track => ({
         id: `radio-rec-${track.id}`,
         title: track.title.toUpperCase(),
@@ -82,6 +87,7 @@ export default async function handler(req, res) {
     relatedTracks.forEach((t, idx) => {
       combinedTracks.push(t);
       if (idx === 2 && mainTracks[1]) combinedTracks.push(mainTracks[1]);
+      if (idx === 6 && mainTracks[2]) combinedTracks.push(mainTracks[2]);
     });
 
     return res.status(200).json({

@@ -167,16 +167,12 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
       container.querySelector('#queue-sheet-overlay')?.classList.add('open');
     }, 10);
 
-    // If upcoming queue is low, proactively resolve smart suggestions for the current track
+    // If upcoming queue is low, proactively trigger endless auto-refill
     const currentTrack = audioEngine.currentTrack;
     const upNext = (audioEngine.queue || []).slice((audioEngine.queueIndex || 0) + 1);
-    if (currentTrack && upNext.length < 3) {
-      musicSearchService.getSmartQueueForTrack(currentTrack, SAMPLE_TRACKS).then(curated => {
-        if (curated && curated.length > 1 && audioEngine.currentTrack?.id === currentTrack.id) {
-          audioEngine.queue = curated;
-          audioEngine.queueIndex = 0;
-          if (isOpen && !isLoading) update();
-        }
+    if (currentTrack && upNext.length < 5) {
+      audioEngine.ensureQueueDepth().then(() => {
+        if (isOpen && !isLoading) update();
       }).catch(() => {});
     }
 

@@ -258,16 +258,17 @@ assert(searchViewJs.includes('getSmartQueueForTrack'), 'searchView.js calls getS
 assert(!searchViewJs.includes('audioEngine.setQueue(currentResults'), 'searchView.js does not dump raw search results into queue');
 
 const queueModalJs = fs.readFileSync(path.join(projectRoot, 'src/ui/queueModal.js'), 'utf8');
-assert(queueModalJs.includes('getSmartQueueForTrack'), 'queueModal.js proactively enriches low queue with smart suggestions on open');
+assert(queueModalJs.includes('ensureQueueDepth') || queueModalJs.includes('getSmartQueueForTrack'), 'queueModal.js proactively enriches low queue with smart suggestions on open');
 
 const musicSearchServiceJs = fs.readFileSync(path.join(projectRoot, 'src/services/musicSearchService.js'), 'utf8');
 assert(musicSearchServiceJs.includes('getSmartQueueForTrack(track'), 'musicSearchService.js implements getSmartQueueForTrack');
 assert(musicSearchServiceJs.includes('titleUpper !== baseTitle'), 'musicSearchService excludes duplicate titles matching the searched track title');
 
-// 24. MUSE Rebranding & Cross-Artist Algorithmic Radio Up Next
+// 24. MUSE Rebranding & Cross-Artist Algorithmic Radio Up Next with Endless Queue Auto-Refill
 console.log('\n--- 24. MUSE Rebranding & Cross-Artist Algorithmic Radio Up Next ---');
 assert(fs.existsSync(path.join(projectRoot, 'api/radio-recommendations.js')), 'api/radio-recommendations.js serverless endpoint exists');
 assert(musicSearchServiceJs.includes('/api/radio-recommendations'), 'musicSearchService.js integrates with algorithmic radio recommendations endpoint');
+assert(audioEngineCode.includes('ensureQueueDepth'), 'audioEngine.js implements ensureQueueDepth for endless non-repeating queue auto-refill');
 const indexHtmlContent = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
 assert(indexHtmlContent.includes('MUSE — Elevate Every Moment With Sound'), 'index.html has MUSE title');
 assert(indexHtmlContent.includes('content="MUSE"'), 'index.html has apple-mobile-web-app-title MUSE');

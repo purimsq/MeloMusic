@@ -39,7 +39,8 @@ export class AudioEngine {
     // Queues & History
     this.queue = [...SAMPLE_TRACKS];
     this.queueIndex = 0;
-    this.history = []; // rolling 50 IDs to prevent repetition
+    this.history = []; // rolling list of played track titles/IDs to prevent repetition
+    this.isReplenishingQueue = false;
 
     // Lyrics
     this.lyricsEngine = new LyricsEngine();
@@ -454,6 +455,54 @@ export class AudioEngine {
     this.queueIndex = Math.max(0, Math.min(startIndex, this.queue.length - 1));
     this.loadTrack(this.queue[this.queueIndex], autoPlay);
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+    this.ensureQueueDepth();
+  }
+
+  /**
+   * Endless Queue Auto-Refill (YouTube / Spotify Style)
+   * As the listener approaches the end of the queue (or on the last song),
+   * automatically fetches non-repeating recommendations by varied related artists.
+   */
+  async ensureQueueDepth() {
+    if (this.isReplenishingQueue) return;
+    const remaining = this.queue.length - (this.queueIndex + 1);
+    if (remaining > 4) return; // Keep at least 4-5 upcoming tracks in queue
+
+    const seedTrack = this.queue[this.queue.length - 1] || this.currentTrack;
+    if (!seedTrack || !seedTrack.artist) return;
+
+    this.isReplenishingQueue = true;
+    try {
+      const seenTitles = new Set(this.queue.map(t => (t.title || '').trim().toUpperCase()));
+      if (Array.isArray(this.history)) {
+        this.history.forEach(h => {
+          if (typeof h === 'string') seenTitles.add(h.trim().toUpperCase());
+          else if (h && h.title) seenTitles.add((h.title || '').trim().toUpperCase());
+        });
+      }
+
+      const freshTracks = await musicSearchService.getSmartQueueForTrack(
+        seedTrack,
+        SAMPLE_TRACKS,
+        Array.from(seenTitles)
+      );
+
+      const newAdditions = freshTracks.filter(t => {
+        const u = (t.title || '').trim().toUpperCase();
+        if (seenTitles.has(u)) return false;
+        seenTitles.add(u);
+        return true;
+      });
+
+      if (newAdditions.length > 0) {
+        this.queue.push(...newAdditions);
+        this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+      }
+    } catch (e) {
+      console.warn('Endless queue replenishment fallback:', e);
+    } finally {
+      this.isReplenishingQueue = false;
+    }
   }
 
   updateMediaSessionMetadata() {
@@ -527,6 +576,16 @@ export class AudioEngine {
 
     this.updateMediaSessionMetadata();
     this.notify('trackChange', track);
+
+    // Track play history to prevent duplicate suggestions in auto-refill
+    if (track && track.title) {
+      const tUpper = (track.title || '').trim().toUpperCase();
+      if (!this.history.includes(tUpper)) {
+        this.history.push(tUpper);
+        if (this.history.length > 80) this.history.shift();
+      }
+    }
+    this.ensureQueueDepth();
 
     // 1. Check offline cached audio blob or device music file
     // Device tracks (local MP3s) or offline playback use local blob
@@ -732,12 +791,18 @@ export class AudioEngine {
 
     if (this.isShuffle) {
       this.queueIndex = Math.floor(Math.random() * this.queue.length);
+    } else if (this.queueIndex < this.queue.length - 1) {
+      this.queueIndex++;
     } else {
-      this.queueIndex = (this.queueIndex + 1) % this.queue.length;
+      // Reached the end of upcoming tracks: auto-replenish and loop if needed
+      if (this.repeatMode === 'all') {
+        this.queueIndex = (this.queueIndex + 1) % this.queue.length;
+      }
     }
 
     this.loadTrack(this.queue[this.queueIndex], true);
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+    this.ensureQueueDepth();
   }
 
   prev() {
@@ -762,7 +827,8 @@ export class AudioEngine {
     if (this.repeatMode === 'one') {
       this.seek(0);
       this.play();
-    } else if (this.repeatMode === 'all' || this.queueIndex < this.queue.length - 1) {
+    } else {
+      // Move to next track and auto-refill queue with fresh recommendations
       this.next();
     }
   }

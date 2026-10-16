@@ -147,21 +147,27 @@ export class MusicSearchService {
    * 3. Supplements with top companion tracks worldwide.
    * 4. Excludes duplicate titles matching the query so the queue is never flooded with the same song title.
    */
-  async getSmartQueueForTrack(track, fallbackPool = []) {
+  async getSmartQueueForTrack(track, fallbackPool = [], excludeTitles = []) {
     if (!track) return [];
 
     const baseTitle = (track.title || '').trim().toUpperCase();
     const artistName = (track.artist || '').trim();
 
-    const queue = [track];
-    const seenTitles = new Set([baseTitle]);
+    const queue = [];
+    const seenTitles = new Set(excludeTitles.map(t => String(t).trim().toUpperCase()));
+    if (!seenTitles.has(baseTitle)) {
+      seenTitles.add(baseTitle);
+      queue.push(track);
+    }
+
     const seenArtists = new Set();
     if (artistName) seenArtists.add(artistName.toLowerCase());
 
     // 1. Primary: Algorithmic Multi-Artist YouTube/Deezer Radio Recommendations
     if (artistName && navigator.onLine) {
       try {
-        const radioRes = await fetch(`/api/radio-recommendations?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(baseTitle)}`);
+        const excludeParam = encodeURIComponent(Array.from(seenTitles).slice(-15).join(','));
+        const radioRes = await fetch(`/api/radio-recommendations?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(baseTitle)}&exclude=${excludeParam}`);
         if (radioRes.ok) {
           const radioData = await radioRes.json();
           if (radioData.tracks && radioData.tracks.length > 0) {
@@ -191,9 +197,9 @@ export class MusicSearchService {
     }
 
     // 2. Secondary: Complementary artist tracks from worldwide catalog
-    if (queue.length < 10 && artistName && navigator.onLine) {
+    if (queue.length < 12 && artistName && navigator.onLine) {
       try {
-        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=12`);
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=15`);
         if (res.ok) {
           const data = await res.json();
           (data.results || []).forEach(t => {
