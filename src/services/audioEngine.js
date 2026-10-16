@@ -9,6 +9,11 @@ export class AudioEngine {
     this.audio = new Audio();
     this.audio.preload = 'auto';
 
+    // Dedicated background audio keep-alive for Android native lockscreen playback
+    this.bgAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+    this.bgAudio.loop = true;
+    this.bgAudio.volume = 0.001;
+
     // Playback modes: 'yt' (ad-free YouTube master audio) or 'html5' (offline blob / device music)
     this.currentMode = 'yt';
 
@@ -193,6 +198,15 @@ export class AudioEngine {
       this.notify('loadingChange', { isLoading: false, track: this.currentTrack });
       this.notify('playStateChange', { isPlaying: true });
     } else if (state === window.YT.PlayerState.PAUSED) {
+      if (this.isPlaying && !this.userRequestedPause) {
+        // Android background playback keep-alive: screen locked or app minimized
+        try {
+          if (this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
+            this.ytPlayer.playVideo();
+            return;
+          }
+        } catch (e) {}
+      }
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('paused');
@@ -703,6 +717,7 @@ export class AudioEngine {
 
   async play() {
     this.userRequestedPause = false;
+    this.bgAudio.play().catch(() => {});
     if (!this.currentTrack && this.queue.length > 0) {
       this.loadTrack(this.queue[this.queueIndex], true);
       return;
@@ -737,6 +752,7 @@ export class AudioEngine {
 
   pause() {
     this.userRequestedPause = true;
+    try { this.bgAudio.pause(); } catch (e) {}
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();
       this.isPlaying = false;

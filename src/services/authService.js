@@ -23,29 +23,39 @@ class AuthService {
   }
 
   init() {
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        this.currentUser = user;
-        // Fetch or create profile in Firestore
-        const profile = await this.syncUserProfile(user);
-        this.userProfile = profile;
-        Storage.setUserProfile(profile);
-        if (profile?.favoriteArtists && profile.favoriteArtists.length >= 3) {
-          Storage.setFavoriteArtists(profile.favoriteArtists);
-          Storage.setCompletedOnboarding(true);
+    if (!auth) {
+      console.warn('Firebase Auth instance not available, using local session');
+      return;
+    }
+    try {
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          this.currentUser = user;
+          // Fetch or create profile in Firestore
+          const profile = await this.syncUserProfile(user);
+          this.userProfile = profile;
+          Storage.setUserProfile(profile);
+          if (profile?.favoriteArtists && profile.favoriteArtists.length >= 3) {
+            Storage.setFavoriteArtists(profile.favoriteArtists);
+            Storage.setCompletedOnboarding(true);
+          }
+        } else {
+          this.currentUser = null;
         }
-      } else {
-        this.currentUser = null;
-      }
-      this.notifyListeners();
-    });
+        this.notifyListeners();
+      });
+    } catch (e) {
+      console.warn('onAuthStateChanged notice:', e);
+    }
   }
 
   /**
    * Syncs user profile with Firestore for multi-user cloud capability
    */
   async syncUserProfile(user) {
+    if (!user || !user.uid) return null;
     try {
+      if (!db) throw new Error('Firestore not initialized');
       const userRef = doc(db, 'users', user.uid);
       const snapshot = await getDoc(userRef);
 

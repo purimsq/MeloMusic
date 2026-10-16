@@ -766,11 +766,12 @@ class App {
   }
 }
 
-// Register Service Worker for PWA Offline Functionality
-if ('serviceWorker' in navigator) {
+// Register Service Worker for PWA (Only in web browsers, never inside native Capacitor WebView)
+const isNativeApp = typeof window !== 'undefined' && (window.Capacitor?.isNativePlatform?.() || window.Capacitor !== undefined);
+if ('serviceWorker' in navigator && !isNativeApp) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then(() => {
-      console.log('Melo PWA Service Worker active');
+      console.log('MUSE PWA Service Worker active');
     }).catch(err => {
       console.warn('PWA Service Worker note:', err);
     });
@@ -780,11 +781,10 @@ if ('serviceWorker' in navigator) {
 // Global Error Boundary & Resilience Guards (Never let minor errors white-screen the app)
 window.addEventListener('error', (event) => {
   console.warn('Melo error boundary caught:', event.error || event.message);
-  // Ensure an active view remains visible
   const activeView = document.querySelector('.view.active');
   if (!activeView) {
-    const home = document.querySelector('#view-home');
-    if (home) home.classList.add('active');
+    const onboarding = document.querySelector('#view-onboarding');
+    if (onboarding) onboarding.classList.add('active');
   }
 });
 
@@ -793,7 +793,30 @@ window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault();
 });
 
-// Initialize Application
-window.addEventListener('DOMContentLoaded', () => {
-  new App();
-});
+// Resilient Application Bootstrap: Supports both deferred module execution & DOMContentLoaded
+function bootstrapApp() {
+  try {
+    if (!window.__muse_app_initialized) {
+      window.__muse_app_initialized = true;
+      window.__muse_app = new App();
+    }
+  } catch (err) {
+    console.error('Fatal initialization error:', err);
+    const root = document.querySelector('#app');
+    if (root && !root.innerHTML.trim()) {
+      root.innerHTML = `
+        <div style="background-color: #EBEBE9; width: 100%; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; font-family: -apple-system, sans-serif;">
+          <h2 style="font-size: 26px; font-weight: 800; color: #111; margin-bottom: 8px;">MUSE</h2>
+          <p style="color: #666; font-size: 14px; max-width: 320px; line-height: 1.5; margin-bottom: 24px;">Elevate Every Moment With Sound. Tap below to launch your audio experience.</p>
+          <button onclick="location.reload()" style="background: #111; color: #fff; border: none; padding: 14px 32px; border-radius: 30px; font-weight: 700; font-size: 14px; cursor: pointer;">Open MUSE</button>
+        </div>
+      `;
+    }
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapApp);
+} else {
+  bootstrapApp();
+}

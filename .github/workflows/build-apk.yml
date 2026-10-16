@@ -24,6 +24,14 @@ jobs:
 
       - name: Build Web Production Assets
         run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY || 'AIzaSyCWsTjzGo1m4wk-dx2vrfcfFCrJZHkbAVE' }}
+          VITE_FIREBASE_AUTH_DOMAIN: melo-bc6cc.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: melo-bc6cc
+          VITE_FIREBASE_STORAGE_BUCKET: melo-bc6cc.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: '524826675391'
+          VITE_FIREBASE_APP_ID: 1:524826675391:web:bfed19776d4af523635e0a
+          VITE_FIREBASE_MEASUREMENT_ID: G-HDBBY0XKGV
 
       - name: Sync Capacitor Android
         run: npx cap sync android

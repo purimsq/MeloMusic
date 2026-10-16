@@ -487,6 +487,7 @@ export const Storage = {
     if (!profile || !profile.uid || !profile.isLoggedIn) return;
 
     try {
+      if (!db) return;
       const userRef = doc(db, 'users', profile.uid);
       await setDoc(userRef, {
         likedSongs: this.getLikedSongs().map(t => ({

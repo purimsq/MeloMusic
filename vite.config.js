@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
   const emailPass = env.EMAIL_PASS || process.env.EMAIL_PASS || '';
 
   return {
+  base: './',
   server: {
     port: 5173,
     host: true
