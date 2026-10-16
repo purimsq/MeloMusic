@@ -139,6 +139,9 @@ export default defineConfig(({ mode }) => {
 
               const transporter = nodemailer.createTransport({
                 service: 'gmail',
+                pool: true,
+                maxConnections: 3,
+                maxMessages: 100,
                 auth: {
                   user: emailUser,
                   pass: emailPass
