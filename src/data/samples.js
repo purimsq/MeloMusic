@@ -9,6 +9,7 @@ export const SAMPLE_TRACKS = [
     duration: 205, // 03:25
     cover: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/be/0c/64/be0c6448-b0fc-a1eb-3e33-4456d58d33de/886449049059.jpg/600x600bb.jpg',
     youtubeId: '9SR_QJvQ74E',
+    audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/6d/2f/f2/6d2ff227-e0a2-3e90-4fb1-44d0d4425df9/mzaf_15634480460206980030.plus.aac.p.m4a',
     lyrics: `[00:00.00] Yeah, yeah, yeah
 [00:06.50] Steady callin' my phone
 [00:11.20] I done told you before that it's over, leave me 'lone
@@ -30,6 +31,7 @@ export const SAMPLE_TRACKS = [
     duration: 200, // 03:20
     cover: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
     youtubeId: '4NRXx6U8ABQ',
+    audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/12/73/ca/1273ca46-233a-5331-189b-25ac1d656533/mzaf_976341070785891411.plus.aac.p.m4a',
     lyrics: `[00:00.00] Yeah
 [00:12.50] I've been tryna call
 [00:15.80] I've been on my own for long enough
@@ -53,6 +55,7 @@ export const SAMPLE_TRACKS = [
     duration: 196, // 03:16
     cover: 'https://i.scdn.co/image/ab67616d0000b27371d62ea7ea8a5be92d3c1f62',
     youtubeId: 'V9PVRfjEBTI',
+    audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/34/31/d3/3431d34e-847f-5d66-df83-0bce688d997e/mzaf_18106743962423782018.plus.aac.p.m4a',
     lyrics: `[00:00.00] I want you to stay
 [00:05.40] 'Til I'm in the grave
 [00:10.20] 'Til I rot away, dead and buried
@@ -74,6 +77,7 @@ export const SAMPLE_TRACKS = [
     duration: 198, // 03:18
     cover: 'https://i.scdn.co/image/ab67616d0000b273f907de96b9a4fbc5b86b3d18',
     youtubeId: 'xpVfcZ0ZcFM',
+    audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/c6/4a/be/c64abe74-adb4-cff5-005d-0fab3d72a806/mzaf_10276154697254415719.plus.aac.p.m4a',
     lyrics: `[00:00.00] Yeah, they wishin' and wishin' and wishin' and wishin'
 [00:04.20] They wishin' on me, yeah
 [00:07.80] I been movin' calm, don't start no trouble with me
@@ -98,6 +102,7 @@ export const SAMPLE_TRACKS = [
     duration: 230, // 03:50
     cover: 'https://i.scdn.co/image/ab67616d0000b2734718e2b124f79258be7bc452',
     youtubeId: '34Na4j8AVgA',
+    audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/11/71/d6/1171d6ad-3c96-e027-2af6-58028426588c/mzaf_15137631797407745471.plus.aac.p.m4a',
     lyrics: `[00:00.00] I'm tryna put you in the worst mood, ah
 [00:07.50] P1 cleaner than your church shoes, ah
 [00:11.20] Milli point two just to hurt you, ah
@@ -119,6 +124,7 @@ export const SAMPLE_TRACKS = [
     duration: 191, // 03:11
     cover: 'https://i.scdn.co/image/ab67616d0000b273e9e7fa56a642a8b98216b328',
     youtubeId: 'B9synWjqBn8',
+    audioUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ce/61/9a/ce619acc-40f8-5bf0-c6d8-5649dacc5d3c/mzaf_9048266760750013994.plus.aac.p.m4a',
     lyrics: `[00:00.00] Just come outside for the night
 [00:05.50] Take your time, get your light
 [00:10.20] Johnny Dang, huh, yeah

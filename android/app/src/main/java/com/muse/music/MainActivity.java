@@ -37,6 +37,21 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         instance = this;
 
+        // Request POST_NOTIFICATIONS for Android 13+ so Foreground Service & lockscreen controls can display
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
+        }
+
+        // Spotify-style background navigation: Pressing Back moves task to background without killing WebView or audio
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                moveTaskToBack(true);
+            }
+        });
+
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -57,6 +72,12 @@ public class MainActivity extends BridgeActivity {
         registerScreenOffReceiver();
     }
 
+    @Override
+    public void onBackPressed() {
+        // Prevent activity finish; keep music playing seamlessly in background
+        moveTaskToBack(true);
+    }
+
     private void registerScreenOffReceiver() {
         try {
             screenOffReceiver = new BroadcastReceiver() {
@@ -68,7 +89,12 @@ public class MainActivity extends BridgeActivity {
                 }
             };
             IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
-            registerReceiver(screenOffReceiver, filter);
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                screenOffReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            );
         } catch (Exception e) {
             e.printStackTrace();
         }

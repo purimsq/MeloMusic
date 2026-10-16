@@ -307,6 +307,15 @@ export class AudioEngine {
             return;
           }
         } catch (e) {}
+
+        // If YouTube is blocked from background playback, seamlessly fall back to direct audio stream
+        if (this.currentTrack?.audioUrl) {
+          this.currentMode = 'html5';
+          this.audio.src = this.currentTrack.audioUrl;
+          this.audio.currentTime = this.currentTime || 0;
+          this.audio.play().catch(() => {});
+          return;
+        }
       }
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
@@ -329,17 +338,22 @@ export class AudioEngine {
       let time = 0;
       let dur = this.duration || this.currentTrack?.duration || 0;
 
-      if (this.currentMode === 'yt' && this.ytPlayer) {
+      if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.getCurrentTime === 'function') {
         try {
-          if (typeof this.ytPlayer.getCurrentTime === 'function') {
-            time = this.ytPlayer.getCurrentTime() || 0;
-            const ytDur = typeof this.ytPlayer.getDuration === 'function' ? this.ytPlayer.getDuration() : 0;
-            if (ytDur > 0) dur = ytDur;
-          }
+          time = this.ytPlayer.getCurrentTime() || 0;
+          const ytDur = typeof this.ytPlayer.getDuration === 'function' ? this.ytPlayer.getDuration() : 0;
+          if (ytDur > 0) dur = ytDur;
         } catch (e) {}
-      } else if (this.currentMode === 'html5' && this.audio) {
-        time = this.audio.currentTime || 0;
-        if (this.audio.duration > 0) dur = this.audio.duration;
+      }
+
+      // Read HTML5 audio if it is playing or if YouTube did not report progress
+      if ((time === 0 || this.currentMode === 'html5') && this.audio && !isNaN(this.audio.currentTime)) {
+        if (this.audio.currentTime > 0) {
+          time = this.audio.currentTime;
+        }
+        if (this.audio.duration > 0 && !isNaN(this.audio.duration) && isFinite(this.audio.duration)) {
+          dur = this.audio.duration;
+        }
       }
 
       this.currentTime = time;
@@ -426,43 +440,46 @@ export class AudioEngine {
     });
 
     this.audio.addEventListener('timeupdate', () => {
-      if (this.currentMode !== 'html5') return;
-      this.currentTime = this.audio.currentTime;
-      this.duration = this.audio.duration || this.currentTrack?.duration || 0;
+      if (this.audio.currentTime > 0 || this.currentMode === 'html5') {
+        this.currentTime = this.audio.currentTime;
+        if (this.audio.duration > 0 && !isNaN(this.audio.duration) && isFinite(this.audio.duration)) {
+          this.duration = this.audio.duration;
+        }
 
-      const activeLyricIdx = this.lyricsEngine.getActiveIndex(this.currentTime);
+        const activeLyricIdx = this.lyricsEngine.getActiveIndex(this.currentTime);
 
-      this.notify('timeUpdate', {
-        currentTime: this.currentTime,
-        duration: this.duration,
-        progress: this.duration > 0 ? this.currentTime / this.duration : 0
-      });
+        this.notify('timeUpdate', {
+          currentTime: this.currentTime,
+          duration: this.duration || this.currentTrack?.duration || 0,
+          progress: (this.duration > 0) ? (this.currentTime / this.duration) : 0
+        });
 
-      this.notify('lyricsUpdate', {
-        activeIndex: activeLyricIdx,
-        currentTime: this.currentTime
-      });
+        this.notify('lyricsUpdate', {
+          activeIndex: activeLyricIdx,
+          currentTime: this.currentTime
+        });
 
-      if ('mediaSession' in navigator && this.duration > 0) {
-        try {
-          navigator.mediaSession.setPositionState({
-            duration: this.duration,
-            playbackRate: this.audio.playbackRate,
-            position: this.currentTime
-          });
-        } catch (e) {}
+        if ('mediaSession' in navigator && this.duration > 0) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration: this.duration,
+              playbackRate: this.audio.playbackRate || 1,
+              position: this.currentTime
+            });
+          } catch (e) {}
+        }
       }
     });
 
     this.audio.addEventListener('loadedmetadata', () => {
-      if (this.currentMode === 'html5') {
+      if (this.audio.duration > 0 && !isNaN(this.audio.duration) && isFinite(this.audio.duration)) {
         this.duration = this.audio.duration;
-        this.notify('timeUpdate', {
-          currentTime: this.currentTime,
-          duration: this.duration,
-          progress: 0
-        });
       }
+      this.notify('timeUpdate', {
+        currentTime: this.currentTime,
+        duration: this.duration,
+        progress: (this.duration > 0) ? (this.currentTime / this.duration) : 0
+      });
     });
 
     this.audio.addEventListener('ended', () => {
@@ -581,14 +598,48 @@ export class AudioEngine {
   }
 
   /**
-   * Endless Queue Auto-Refill (YouTube / Spotify Style)
+   * Generates a smart Up Next queue tailored to the selected track
+   * so every clicked song gets rich, multi-artist radio recommendations.
+   */
+  async populateSmartQueue(seedTrack) {
+    if (!seedTrack || !seedTrack.artist) return;
+    try {
+      const seenTitles = new Set([
+        (seedTrack.title || '').trim().toUpperCase(),
+        ...this.queue.map(t => (t.title || '').trim().toUpperCase())
+      ]);
+
+      const freshTracks = await musicSearchService.getSmartQueueForTrack(
+        seedTrack,
+        SAMPLE_TRACKS,
+        Array.from(seenTitles)
+      );
+
+      const additions = freshTracks.filter(t => {
+        const u = (t.title || '').trim().toUpperCase();
+        if (seenTitles.has(u)) return false;
+        seenTitles.add(u);
+        return true;
+      });
+
+      if (additions.length > 0 && this.currentTrack?.id === seedTrack.id) {
+        this.queue.push(...additions);
+        this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+      }
+    } catch (e) {
+      console.warn('Smart queue population fallback:', e);
+    }
+  }
+
+  /**
+   * Endless Queue Auto-Refill (Spotify Style)
    * As the listener approaches the end of the queue (or on the last song),
    * automatically fetches non-repeating recommendations by varied related artists.
    */
-  async ensureQueueDepth() {
+  async ensureQueueDepth(force = false) {
     if (this.isReplenishingQueue) return;
     const remaining = this.queue.length - (this.queueIndex + 1);
-    if (remaining > 4) return; // Keep at least 4-5 upcoming tracks in queue
+    if (!force && remaining >= 5) return; // Keep at least 5 upcoming tracks in queue
 
     const seedTrack = this.queue[this.queue.length - 1] || this.currentTrack;
     if (!seedTrack || !seedTrack.artist) return;
@@ -667,9 +718,9 @@ export class AudioEngine {
   }
 
   /**
-   * Loads track with buffering/loading state & streams the real song ad-free from YouTube
+   * Loads track with buffering/loading state & resilient background audio playback
    */
-  async loadTrack(track, autoPlay = true) {
+  async loadTrack(track, autoPlay = true, buildSmartQueue = true) {
     if (!track) return;
     this.userRequestedPause = false;
     this.currentTrack = track;
@@ -688,7 +739,13 @@ export class AudioEngine {
     if (existingIndex !== -1) {
       this.queueIndex = existingIndex;
     } else {
-      this.queue.splice(this.queueIndex, 0, track);
+      if (this.queue.length === 0 || this.queueIndex === 0) {
+        this.queue.unshift(track);
+        this.queueIndex = 0;
+      } else {
+        this.queue.splice(this.queueIndex + 1, 0, track);
+        this.queueIndex++;
+      }
     }
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
 
@@ -707,10 +764,14 @@ export class AudioEngine {
         if (this.history.length > 80) this.history.shift();
       }
     }
-    this.ensureQueueDepth();
+
+    if (buildSmartQueue) {
+      this.populateSmartQueue(track);
+    } else {
+      this.ensureQueueDepth();
+    }
 
     // 1. Check offline cached audio blob or device music file
-    // Device tracks (local MP3s) or offline playback use local blob
     const isDeviceTrack = track.isDeviceMusic || track.source === 'device' || track.blob instanceof Blob;
     let audioBlob = track.blob;
     if (!audioBlob && (!navigator.onLine || isDeviceTrack)) {
@@ -718,7 +779,6 @@ export class AudioEngine {
     }
 
     // Only play cached audio blob if offline OR if it is a local device file.
-    // When online, ALWAYS stream the full master track from YouTube!
     if (audioBlob && (!navigator.onLine || isDeviceTrack)) {
       this.currentMode = 'html5';
       this.stopYouTubeProgressTracker();
@@ -730,6 +790,8 @@ export class AudioEngine {
       this.audio.loop = false;
       this.audio.load();
       if (autoPlay) this.play();
+      this.savePlaybackSessionState();
+      this.notifyNativeBridge(autoPlay);
       return;
     }
 
@@ -746,70 +808,71 @@ export class AudioEngine {
       return;
     }
 
-    // 3. Online Track: Stream exact master audio ad-free from YouTube or high-res audio stream
+    // 3. Online Track: Prioritize direct audio stream for resilient background playback, instant buffering & equalizer support
     this.isLoadingTrack = true;
     this.notify('loadingChange', { isLoading: true, track });
 
-    let youtubeId = track.youtubeId;
-    if (!youtubeId && navigator.onLine) {
-      youtubeId = await musicSearchService.resolveYouTubeVideoId(track);
-      if (youtubeId) {
-        track.youtubeId = youtubeId;
+    let streamUrl = track.audioUrl;
+    if (streamUrl) {
+      this.currentMode = 'html5';
+      this.stopYouTubeProgressTracker();
+      if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+        try { this.ytPlayer.pauseVideo(); } catch (e) {}
       }
-    }
-
-    let playedViaYouTube = false;
-    if (youtubeId && navigator.onLine) {
-      if (!this.ytPlayer || !this.ytReady) {
-        await Promise.race([
-          this.initYouTubePlayer(),
-          new Promise((r) => setTimeout(() => r(null), 3500))
-        ]);
+      this.audio.src = streamUrl;
+      this.audio.loop = false;
+      this.audio.load();
+      const startSec = this.pendingResumeTime || 0;
+      this.pendingResumeTime = 0;
+      if (startSec > 0) {
+        this.audio.currentTime = startSec;
+      }
+      if (autoPlay) {
+        this.play();
+      }
+      this.isLoadingTrack = false;
+      this.notify('loadingChange', { isLoading: false, track });
+    } else {
+      // Fallback to YouTube if no direct audioUrl is present
+      let youtubeId = track.youtubeId;
+      if (!youtubeId && navigator.onLine) {
+        youtubeId = await musicSearchService.resolveYouTubeVideoId(track);
+        if (youtubeId) {
+          track.youtubeId = youtubeId;
+        }
       }
 
-      if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
-        this.currentMode = 'yt';
-        this.audio.pause();
-        const startSec = this.pendingResumeTime || 0;
-        this.pendingResumeTime = 0;
-        this.ytPlayer.loadVideoById({
-          videoId: youtubeId,
-          startSeconds: startSec
-        });
+      if (youtubeId && navigator.onLine) {
+        if (!this.ytPlayer || !this.ytReady) {
+          await Promise.race([
+            this.initYouTubePlayer(),
+            new Promise((r) => setTimeout(() => r(null), 3500))
+          ]);
+        }
 
-        if (autoPlay) {
-          this.isPlaying = true;
-          this.startYouTubeProgressTracker();
-          this.updateMediaSessionPlaybackState('playing');
-        } else {
-          setTimeout(() => {
-            if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
-              this.ytPlayer.pauseVideo();
-              this.updateMediaSessionPlaybackState('paused');
-            }
-          }, 100);
-        }
-        playedViaYouTube = true;
-      }
-    }
+        if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+          this.currentMode = 'yt';
+          this.audio.pause();
+          const startSec = this.pendingResumeTime || 0;
+          this.pendingResumeTime = 0;
+          this.ytPlayer.loadVideoById({
+            videoId: youtubeId,
+            startSeconds: startSec
+          });
 
-    // Fallback to HTML5 audio stream if YouTube was unavailable or failed
-    if (!playedViaYouTube) {
-      if (track.audioUrl) {
-        this.currentMode = 'html5';
-        this.stopYouTubeProgressTracker();
-        if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
-          try { this.ytPlayer.pauseVideo(); } catch (e) {}
+          if (autoPlay) {
+            this.isPlaying = true;
+            this.startYouTubeProgressTracker();
+            this.updateMediaSessionPlaybackState('playing');
+          } else {
+            setTimeout(() => {
+              if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+                this.ytPlayer.pauseVideo();
+                this.updateMediaSessionPlaybackState('paused');
+              }
+            }, 100);
+          }
         }
-        this.audio.src = track.audioUrl;
-        this.audio.loop = false;
-        this.audio.load();
-        const startSec = this.pendingResumeTime || 0;
-        this.pendingResumeTime = 0;
-        if (startSec > 0) {
-          this.audio.currentTime = startSec;
-        }
-        if (autoPlay) this.play();
       } else {
         window.dispatchEvent(new CustomEvent('melo-toast', {
           detail: {
@@ -817,9 +880,9 @@ export class AudioEngine {
             isSuccess: false
           }
         }));
+        this.isLoadingTrack = false;
+        this.notify('loadingChange', { isLoading: false, track });
       }
-      this.isLoadingTrack = false;
-      this.notify('loadingChange', { isLoading: false, track });
     }
 
     // Add to history
@@ -927,7 +990,7 @@ export class AudioEngine {
     this.seek(target);
   }
 
-  next() {
+  async next() {
     if (this.queue.length === 0) return;
 
     if (this.repeatMode === 'one') {
@@ -938,16 +1001,27 @@ export class AudioEngine {
 
     if (this.isShuffle) {
       this.queueIndex = Math.floor(Math.random() * this.queue.length);
-    } else if (this.queueIndex < this.queue.length - 1) {
+      this.loadTrack(this.queue[this.queueIndex], true, false);
+      this.ensureQueueDepth();
+      return;
+    }
+
+    // Approaching or at the end of the queue: force endless replenishment
+    if (this.queueIndex >= this.queue.length - 1) {
+      await this.ensureQueueDepth(true);
+    }
+
+    if (this.queueIndex < this.queue.length - 1) {
       this.queueIndex++;
+      this.loadTrack(this.queue[this.queueIndex], true, false);
     } else {
-      // Reached the end of upcoming tracks: auto-replenish and loop if needed
+      // Offline fallback: loop if repeatMode is all
       if (this.repeatMode === 'all') {
-        this.queueIndex = (this.queueIndex + 1) % this.queue.length;
+        this.queueIndex = 0;
+        this.loadTrack(this.queue[this.queueIndex], true, false);
       }
     }
 
-    this.loadTrack(this.queue[this.queueIndex], true);
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
     this.ensureQueueDepth();
   }
@@ -966,7 +1040,7 @@ export class AudioEngine {
       this.queueIndex = this.queue.length - 1;
     }
 
-    this.loadTrack(this.queue[this.queueIndex], true);
+    this.loadTrack(this.queue[this.queueIndex], true, false);
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
   }
 

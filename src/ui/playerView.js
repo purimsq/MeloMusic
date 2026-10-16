@@ -243,13 +243,40 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     }
   }
 
-  orbitSvg.addEventListener('mousedown', startSeeking);
-  window.addEventListener('mousemove', moveSeeking);
+  let lastSeekTime = 0;
+
+  orbitSvg.addEventListener('mousedown', (e) => {
+    lastSeekTime = Date.now();
+    startSeeking(e);
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (isSeeking) {
+      lastSeekTime = Date.now();
+      moveSeeking(e);
+    }
+  });
   window.addEventListener('mouseup', endSeeking);
 
-  orbitSvg.addEventListener('touchstart', startSeeking, { passive: true });
-  window.addEventListener('touchmove', moveSeeking, { passive: true });
+  orbitSvg.addEventListener('touchstart', (e) => {
+    lastSeekTime = Date.now();
+    startSeeking(e);
+  }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (isSeeking) {
+      lastSeekTime = Date.now();
+      moveSeeking(e);
+    }
+  }, { passive: true });
   window.addEventListener('touchend', endSeeking);
+  window.addEventListener('touchcancel', endSeeking);
+  window.addEventListener('blur', endSeeking);
+
+  // Safety watchdog: ensure seeking state is never stuck
+  setInterval(() => {
+    if (isSeeking && Date.now() - lastSeekTime > 6000) {
+      endSeeking();
+    }
+  }, 1000);
 
   // Playback Controls
   playPauseBtn.addEventListener('click', () => audioEngine.togglePlay());
