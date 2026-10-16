@@ -36,6 +36,9 @@
       try {
         Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
         Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+        window.addEventListener('blur', (e) => {
+          e.stopImmediatePropagation();
+        }, true);
       } catch (e) {}
     </script>
   </head>

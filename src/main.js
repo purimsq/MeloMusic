@@ -31,12 +31,16 @@ class App {
     this.isPlayerOpen = false;
     this.isPlaylistViewOpen = false;
 
-    // Load initial sample track into audio engine queue
-    audioEngine.loadTrack(SAMPLE_TRACKS[0], false);
-
     this.initLayout();
     this.initComponents();
     this.initGlobalEvents();
+
+    // Spotify-style state persistence: restore last playing track, exact seek time and queue
+    const restored = audioEngine.restorePlaybackSession();
+    if (!restored) {
+      audioEngine.loadTrack(SAMPLE_TRACKS[0], false);
+    }
+
     this.initHistory();
   }
 

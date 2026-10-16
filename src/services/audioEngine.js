@@ -46,6 +46,8 @@ export class AudioEngine {
     this.queueIndex = 0;
     this.history = []; // rolling list of played track titles/IDs to prevent repetition
     this.isReplenishingQueue = false;
+    this.pendingResumeTime = 0;
+    this.lastSessionSave = 0;
 
     // Lyrics
     this.lyricsEngine = new LyricsEngine();
@@ -63,11 +65,108 @@ export class AudioEngine {
     this.initAudioListeners();
     this.initYouTubePlayer();
     this.initVisibilityListener();
+    this.initNativeBridgeListeners();
+  }
+
+  initNativeBridgeListeners() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('native-media-action', (e) => {
+        const action = e.detail?.action;
+        if (action === 'toggle') {
+          this.togglePlay();
+        } else if (action === 'next') {
+          this.next();
+        } else if (action === 'previous') {
+          this.prev();
+        }
+      });
+
+      window.addEventListener('beforeunload', () => this.savePlaybackSessionState());
+      window.addEventListener('pagehide', () => this.savePlaybackSessionState());
+    }
+  }
+
+  notifyNativeBridge(isPlaying = this.isPlaying) {
+    if (typeof window !== 'undefined' && window.AndroidMusicBridge) {
+      try {
+        window.AndroidMusicBridge.playTrack(
+          this.currentTrack?.title || 'MUSE Music',
+          this.currentTrack?.artist || 'Unknown Artist',
+          isPlaying
+        );
+      } catch (e) {
+        console.warn('Native bridge notify note:', e);
+      }
+    }
+  }
+
+  savePlaybackSessionState() {
+    if (!this.currentTrack) return;
+    try {
+      Storage.setPlaybackSession({
+        currentTrack: this.currentTrack,
+        currentTime: Math.floor(this.currentTime || 0),
+        duration: Math.floor(this.duration || this.currentTrack.duration || 0),
+        queue: this.queue.slice(0, 50),
+        queueIndex: this.queueIndex,
+        repeatMode: this.repeatMode,
+        isShuffle: this.isShuffle,
+        timestamp: Date.now()
+      });
+    } catch (e) {}
+  }
+
+  restorePlaybackSession() {
+    const session = Storage.getPlaybackSession();
+    if (!session || !session.currentTrack) {
+      return false;
+    }
+
+    try {
+      if (Array.isArray(session.queue) && session.queue.length > 0) {
+        this.queue = [...session.queue];
+        this.queueIndex = typeof session.queueIndex === 'number' && session.queueIndex >= 0 && session.queueIndex < this.queue.length
+          ? session.queueIndex
+          : 0;
+      }
+      if (session.repeatMode) this.repeatMode = session.repeatMode;
+      if (typeof session.isShuffle === 'boolean') this.isShuffle = session.isShuffle;
+
+      const track = session.currentTrack;
+      this.currentTrack = track;
+      const savedTime = session.currentTime || 0;
+      const savedDur = session.duration || track.duration || 0;
+      this.currentTime = savedTime;
+      this.duration = savedDur;
+      this.pendingResumeTime = savedTime;
+      this.isPlaying = false;
+
+      this.lyricsEngine.parseLrc(track.lyrics || '');
+      this.lyricsEngine.resetOffset();
+
+      this.updateMediaSessionMetadata();
+      this.updateMediaSessionPlaybackState('paused');
+
+      this.notify('trackChange', track);
+      this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+      this.notify('timeUpdate', {
+        currentTime: savedTime,
+        duration: savedDur,
+        progress: savedDur > 0 ? savedTime / savedDur : 0
+      });
+      this.notify('playStateChange', { isPlaying: false });
+
+      return true;
+    } catch (e) {
+      console.warn('Failed to restore playback session:', e);
+      return false;
+    }
   }
 
   initVisibilityListener() {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
+        this.savePlaybackSessionState();
         if (!document.hidden && this.isPlaying && this.currentMode === 'yt' && this.ytPlayer) {
           try {
             if (typeof this.ytPlayer.getPlayerState === 'function') {
@@ -195,6 +294,8 @@ export class AudioEngine {
       this.isLoadingTrack = false;
       this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
+      this.notifyNativeBridge(true);
+      this.savePlaybackSessionState();
       this.notify('loadingChange', { isLoading: false, track: this.currentTrack });
       this.notify('playStateChange', { isPlaying: true });
     } else if (state === window.YT.PlayerState.PAUSED) {
@@ -210,6 +311,8 @@ export class AudioEngine {
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('paused');
+      this.notifyNativeBridge(false);
+      this.savePlaybackSessionState();
       this.notify('playStateChange', { isPlaying: false });
     } else if (state === window.YT.PlayerState.BUFFERING) {
       this.isLoadingTrack = true;
@@ -241,6 +344,11 @@ export class AudioEngine {
 
       this.currentTime = time;
       if (dur > 0) this.duration = dur;
+
+      if (Date.now() - this.lastSessionSave > 1500) {
+        this.lastSessionSave = Date.now();
+        this.savePlaybackSessionState();
+      }
 
       const activeLyricIdx = this.lyricsEngine.getActiveIndex(this.currentTime);
 
@@ -662,9 +770,11 @@ export class AudioEngine {
       if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
         this.currentMode = 'yt';
         this.audio.pause();
+        const startSec = this.pendingResumeTime || 0;
+        this.pendingResumeTime = 0;
         this.ytPlayer.loadVideoById({
           videoId: youtubeId,
-          startSeconds: 0
+          startSeconds: startSec
         });
 
         if (autoPlay) {
@@ -694,6 +804,11 @@ export class AudioEngine {
         this.audio.src = track.audioUrl;
         this.audio.loop = false;
         this.audio.load();
+        const startSec = this.pendingResumeTime || 0;
+        this.pendingResumeTime = 0;
+        if (startSec > 0) {
+          this.audio.currentTime = startSec;
+        }
         if (autoPlay) this.play();
       } else {
         window.dispatchEvent(new CustomEvent('melo-toast', {
@@ -713,23 +828,33 @@ export class AudioEngine {
       if (this.history.length > 50) this.history.pop();
     }
     Storage.addRecentSong(track);
+    this.savePlaybackSessionState();
+    this.notifyNativeBridge(autoPlay);
   }
 
   async play() {
     this.userRequestedPause = false;
     this.bgAudio.play().catch(() => {});
+    this.notifyNativeBridge(true);
     if (!this.currentTrack && this.queue.length > 0) {
       this.loadTrack(this.queue[this.queueIndex], true);
       return;
     }
 
+    const resumeTime = this.pendingResumeTime;
+    this.pendingResumeTime = 0;
+
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
       this.audio.pause();
+      if (resumeTime > 0 && typeof this.ytPlayer.seekTo === 'function') {
+        try { this.ytPlayer.seekTo(resumeTime, true); } catch (e) {}
+      }
       this.ytPlayer.playVideo();
       this.isPlaying = true;
       this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
       this.notify('playStateChange', { isPlaying: true });
+      this.savePlaybackSessionState();
       return;
     }
 
@@ -740,11 +865,15 @@ export class AudioEngine {
 
     try {
       this.audio.loop = false;
+      if (resumeTime > 0) {
+        this.audio.currentTime = resumeTime;
+      }
       await this.audio.play();
       this.isPlaying = true;
       this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
       this.notify('playStateChange', { isPlaying: true });
+      this.savePlaybackSessionState();
     } catch (e) {
       console.warn('Playback error', e);
     }
@@ -752,6 +881,8 @@ export class AudioEngine {
 
   pause() {
     this.userRequestedPause = true;
+    this.notifyNativeBridge(false);
+    this.savePlaybackSessionState();
     try { this.bgAudio.pause(); } catch (e) {}
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();

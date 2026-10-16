@@ -35,6 +35,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- MUSE Native Foreground Media Service for Background Audio, Lockscreen & Dynamic Island -->
+        <service
+            android:name=".MusicForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
     <!-- Essential Android Permissions for Background Music & Network -->

@@ -11,10 +11,31 @@ const KEYS = {
   PLAYLISTS: 'melo_custom_playlists',
   RECENT_HISTORY: 'melo_recent_history',
   DEVICE_MUSIC: 'melo_device_music',
-  OFFLINE_AUDIO_PREFIX: 'melo_offline_audio_'
+  OFFLINE_AUDIO_PREFIX: 'melo_offline_audio_',
+  PLAYBACK_SESSION: 'melo_playback_session'
 };
 
 export const Storage = {
+  // --- PLAYBACK SESSION PERSISTENCE (Spotify-style resume) ---
+  getPlaybackSession() {
+    try {
+      const data = localStorage.getItem(KEYS.PLAYBACK_SESSION);
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  setPlaybackSession(session) {
+    try {
+      if (!session) {
+        localStorage.removeItem(KEYS.PLAYBACK_SESSION);
+        return;
+      }
+      localStorage.setItem(KEYS.PLAYBACK_SESSION, JSON.stringify(session));
+    } catch (e) {}
+  },
+
   // --- USER PROFILE ---
   getUserProfile() {
     try {

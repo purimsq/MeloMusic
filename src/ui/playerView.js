@@ -37,7 +37,7 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
 
       <!-- Time Indicator (01:23 | 03:40) -->
       <div class="player-time-badge" id="player-time-display">
-        00:00 <span>|</span> ${formatTime(currentTrack ? currentTrack.duration : 0)}
+        ${formatTime(audioEngine.currentTime || 0)} <span>|</span> ${formatTime(currentTrack ? currentTrack.duration : 0)}
       </div>
 
       <!-- Artwork Section with Circular Orbit Scrubber -->
