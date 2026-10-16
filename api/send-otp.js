@@ -23,6 +23,9 @@ export default async function handler(req, res) {
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
+      pool: true,
+      maxConnections: 3,
+      maxMessages: 100,
       auth: {
         user: emailUser,
         pass: emailPass
@@ -30,9 +33,16 @@ export default async function handler(req, res) {
     });
 
     const mailOptions = {
-      from: `"Melo Music" <${emailUser}>`,
+      from: `"MUSE" <${emailUser}>`,
       to: email,
-      subject: `${code} is your Melo verification code`,
+      subject: `${code} is your MUSE verification code`,
+      priority: 'high',
+      headers: {
+        'X-Priority': '1',
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high'
+      },
+      text: `Hello ${name || 'Music Lover'},\n\nYour MUSE verification code is: ${code}\n\nUse this code to complete your sign-up and sync your favorite artists, playlists, and lossless music vault.\nThis code will expire in 10 minutes.\n\n— MUSE Music Architecture`,
       attachments: [
         {
           filename: 'melo-logo.png',
