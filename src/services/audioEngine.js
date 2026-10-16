@@ -4,9 +4,6 @@ import { Storage } from './storage.js';
 import { LyricsEngine } from './lyricsService.js';
 import { musicSearchService } from './musicSearchService.js';
 
-// Continuous inaudible audio carrier keeps Android/iOS MediaSession active on lockscreen
-const SILENT_AUDIO_URI = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
-
 export class AudioEngine {
   constructor() {
     this.audio = new Audio();
@@ -69,33 +66,14 @@ export class AudioEngine {
           try {
             if (typeof this.ytPlayer.getPlayerState === 'function') {
               const state = this.ytPlayer.getPlayerState();
-              if (state === window.YT?.PlayerState?.PAUSED) {
+              if (state === window.YT?.PlayerState?.PAUSED && !this.userRequestedPause) {
                 this.ytPlayer.playVideo();
-                this.startSilentAudioCarrier();
               }
             }
           } catch (e) {}
         }
       });
     }
-  }
-
-  startSilentAudioCarrier() {
-    try {
-      if (this.audio.src !== SILENT_AUDIO_URI) {
-        this.audio.src = SILENT_AUDIO_URI;
-        this.audio.loop = true;
-      }
-      this.audio.play().catch(() => {});
-    } catch (e) {}
-  }
-
-  stopSilentAudioCarrier() {
-    try {
-      if (this.audio.src === SILENT_AUDIO_URI) {
-        this.audio.pause();
-      }
-    } catch (e) {}
   }
 
   /**
@@ -210,35 +188,19 @@ export class AudioEngine {
       this.isPlaying = true;
       this.isLoadingTrack = false;
       this.startYouTubeProgressTracker();
-      this.startSilentAudioCarrier();
       this.updateMediaSessionPlaybackState('playing');
       this.notify('loadingChange', { isLoading: false, track: this.currentTrack });
       this.notify('playStateChange', { isPlaying: true });
     } else if (state === window.YT.PlayerState.PAUSED) {
-      if (this.userRequestedPause) {
-        this.isPlaying = false;
-        this.stopYouTubeProgressTracker();
-        this.stopSilentAudioCarrier();
-        this.updateMediaSessionPlaybackState('paused');
-        this.notify('playStateChange', { isPlaying: false });
-      } else if (typeof document !== 'undefined' && document.hidden) {
-        // Backgrounding / screen turn off: keep audio carrier alive and maintain lockscreen controls
-        this.startSilentAudioCarrier();
-        this.updateMediaSessionPlaybackState('playing');
-        try { this.ytPlayer?.playVideo(); } catch (e) {}
-      } else {
-        this.isPlaying = false;
-        this.stopYouTubeProgressTracker();
-        this.stopSilentAudioCarrier();
-        this.updateMediaSessionPlaybackState('paused');
-        this.notify('playStateChange', { isPlaying: false });
-      }
+      this.isPlaying = false;
+      this.stopYouTubeProgressTracker();
+      this.updateMediaSessionPlaybackState('paused');
+      this.notify('playStateChange', { isPlaying: false });
     } else if (state === window.YT.PlayerState.BUFFERING) {
       this.isLoadingTrack = true;
       this.notify('loadingChange', { isLoading: true, track: this.currentTrack });
     } else if (state === window.YT.PlayerState.ENDED) {
       this.stopYouTubeProgressTracker();
-      this.stopSilentAudioCarrier();
       this.handleTrackEnded();
     }
   }
@@ -626,7 +588,7 @@ export class AudioEngine {
 
       if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
         this.currentMode = 'yt';
-        this.startSilentAudioCarrier();
+        this.audio.pause();
         this.ytPlayer.loadVideoById({
           videoId: youtubeId,
           startSeconds: 0
@@ -640,7 +602,6 @@ export class AudioEngine {
           setTimeout(() => {
             if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
               this.ytPlayer.pauseVideo();
-              this.stopSilentAudioCarrier();
               this.updateMediaSessionPlaybackState('paused');
             }
           }, 100);
@@ -689,8 +650,8 @@ export class AudioEngine {
     }
 
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
+      this.audio.pause();
       this.ytPlayer.playVideo();
-      this.startSilentAudioCarrier();
       this.isPlaying = true;
       this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
@@ -719,7 +680,6 @@ export class AudioEngine {
     this.userRequestedPause = true;
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();
-      this.stopSilentAudioCarrier();
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('paused');

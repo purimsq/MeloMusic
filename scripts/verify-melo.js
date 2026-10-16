@@ -239,11 +239,10 @@ const libViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/libraryView.js'
 assert(!libViewJs.includes("alert('No audio files found in the chosen directory.')"), 'libraryView.js uses toasts instead of blocking alerts');
 assert(libViewJs.includes("switchTab('device')"), 'libraryView.js uses safe switchTab instead of destructive innerHTML reload');
 
-// 22. Native Lockscreen Player Carrier, Full Online Liked Songs & Clean Tick Status
-console.log('\n--- 22. Native Lockscreen Carrier & Full Online Liked Songs ---');
+// 22. Thubbing Sound Elimination, Visibility Resilience, Full Online Liked Songs & Clean Tick Status
+console.log('\n--- 22. Thubbing Sound Elimination & Full Online Liked Songs ---');
 const audioEngineCode = fs.readFileSync(path.join(projectRoot, 'src/services/audioEngine.js'), 'utf8');
-assert(audioEngineCode.includes('startSilentAudioCarrier'), 'audioEngine.js implements silent carrier for native phone lockscreen controls');
-assert(audioEngineCode.includes('stopSilentAudioCarrier'), 'audioEngine.js stops silent carrier on pause/ended');
+assert(!audioEngineCode.includes('SILENT_AUDIO_URI'), 'audioEngine.js removed looping silent audio carrier to eliminate thubbing sound');
 assert(audioEngineCode.includes('initVisibilityListener'), 'audioEngine.js listens to visibility change for background playback resilience');
 assert(audioEngineCode.includes('if (audioBlob && (!navigator.onLine || isDeviceTrack))'), 'audioEngine.js prevents 30s preview blob from overriding online full song');
 assert(storage.includes('resolvedYoutubeId'), 'storage.js preserves and resolves full YouTube stream ID when song is liked');
