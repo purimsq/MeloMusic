@@ -26,14 +26,14 @@ export function renderOnboardingView(container, { onSignUp, onLogIn }) {
         </div>
       </div>
 
-      <!-- Top Header with Sculpted melo. Brand Logo -->
+      <!-- Top Header with Sculpted muse. Brand Logo -->
       <div class="onboarding-header">
-        <div class="brand-logo-wrap" title="melo.">
+        <div class="brand-logo-wrap" title="muse.">
           <div class="brand-logo-emblem" style="background: transparent; border: none; box-shadow: none; width: 34px; height: 34px;">
-            <img src="/icons/logo-badge.png" alt="Melo Logo" style="width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.18));" />
+            <img src="/icons/logo-badge.png" alt="MUSE Logo" style="width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.18));" />
           </div>
           <div class="brand-logo-text">
-            melo<span class="brand-logo-dot">.</span>
+            muse<span class="brand-logo-dot">.</span>
           </div>
         </div>
       </div>

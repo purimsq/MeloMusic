@@ -195,7 +195,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
         <div class="profile-stats-card">
           <div class="profile-card-header">
             <div>
-              <span class="profile-badge">Melo Sound Signature</span>
+              <span class="profile-badge">MUSE Sound Signature</span>
               <h3 class="profile-stat-title">Your Audio Universe</h3>
             </div>
             <div class="profile-avatar-chip">
@@ -242,8 +242,8 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
                 ${userProfile.photoURL ? `<img src="${userProfile.photoURL}" alt="${userProfile.name}" class="user-avatar-img" />` : initials}
               </div>
               <div style="display: flex; flex-direction: column; overflow: hidden;">
-                <h4 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.name || 'Melo Listener'}</h4>
-                <span style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.email || 'Melo Account'}</span>
+                <h4 style="font-size: 17px; font-weight: 800; color: var(--text-primary); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.name || 'MUSE Listener'}</h4>
+                <span style="font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${userProfile.email || 'MUSE Account'}</span>
                 <div style="display: flex; align-items: center; gap: 6px; margin-top: 6px;">
                   <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #2E7D32; background: rgba(46, 125, 50, 0.1); padding: 2px 8px; border-radius: 8px;">
                     ${Icons.check(12)} Authenticated Account
@@ -272,7 +272,7 @@ export function renderHomeView(container, { audioEngine, onSelectTrack, onOpenPl
             <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px;">
               ${isLoggedIn ? `
                 <button class="btn-black-pill" id="btn-profile-logout" style="background: #E53935; color: #FFF;">
-                  Log Out from Melo
+                  Log Out from MUSE
                 </button>
               ` : `
                 <button class="btn-black-pill" id="btn-profile-signin">

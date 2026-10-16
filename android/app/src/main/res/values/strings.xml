@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MUSE</string>
+    <string name="title_activity_main">MUSE</string>
+    <string name="package_name">com.muse.music</string>
+    <string name="custom_url_scheme">com.muse.music</string>
+</resources>

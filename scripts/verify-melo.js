@@ -264,6 +264,18 @@ const musicSearchServiceJs = fs.readFileSync(path.join(projectRoot, 'src/service
 assert(musicSearchServiceJs.includes('getSmartQueueForTrack(track'), 'musicSearchService.js implements getSmartQueueForTrack');
 assert(musicSearchServiceJs.includes('titleUpper !== baseTitle'), 'musicSearchService excludes duplicate titles matching the searched track title');
 
+// 24. MUSE Rebranding & Cross-Artist Algorithmic Radio Up Next
+console.log('\n--- 24. MUSE Rebranding & Cross-Artist Algorithmic Radio Up Next ---');
+assert(fs.existsSync(path.join(projectRoot, 'api/radio-recommendations.js')), 'api/radio-recommendations.js serverless endpoint exists');
+assert(musicSearchServiceJs.includes('/api/radio-recommendations'), 'musicSearchService.js integrates with algorithmic radio recommendations endpoint');
+const indexHtmlContent = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
+assert(indexHtmlContent.includes('MUSE — Elevate Every Moment With Sound'), 'index.html has MUSE title');
+assert(indexHtmlContent.includes('content="MUSE"'), 'index.html has apple-mobile-web-app-title MUSE');
+const manifestContent = fs.readFileSync(path.join(projectRoot, 'public/manifest.json'), 'utf8');
+assert(manifestContent.includes('"short_name": "MUSE"'), 'manifest.json has short_name MUSE');
+const pkgContent = fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8');
+assert(pkgContent.includes('"name": "muse"'), 'package.json has name muse');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);

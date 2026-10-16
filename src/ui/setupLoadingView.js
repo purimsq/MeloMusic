@@ -193,7 +193,7 @@ export function renderSetupLoadingView(container, { onComplete }) {
 
     // 4. Update bottom status headline & fill progress bar with emerald green
     titleDisplay.textContent = 'Profile All Set Up';
-    subDisplay.textContent = 'Welcome to Melo! Opening your music sanctuary...';
+    subDisplay.textContent = 'Welcome to MUSE! Opening your music sanctuary...';
     linearFill.style.background = '#1E7227';
     linearFill.style.width = '100%';
 

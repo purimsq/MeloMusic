@@ -393,6 +393,98 @@ export default defineConfig(({ mode }) => {
             res.end(JSON.stringify({ error: err.message }));
           }
         });
+
+        // Algorithmic Cross-Artist Radio Recommendations (Deezer + iTunes)
+        server.middlewares.use('/api/radio-recommendations', async (req, res, next) => {
+          if (req.method !== 'GET') return next();
+
+          try {
+            const urlObj = new URL(req.url, 'http://localhost');
+            const artist = urlObj.searchParams.get('artist');
+            const title = urlObj.searchParams.get('title') || '';
+
+            if (!artist) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ error: 'Missing artist param' }));
+            }
+
+            const sRes = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artist)}&limit=1`);
+            const sData = await sRes.json();
+            const mainArtist = sData.data?.[0];
+
+            if (!mainArtist) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ success: true, tracks: [] }));
+            }
+
+            const [relRes, mainTopRes] = await Promise.all([
+              fetch(`https://api.deezer.com/artist/${mainArtist.id}/related?limit=8`),
+              fetch(`https://api.deezer.com/artist/${mainArtist.id}/top?limit=3`)
+            ]);
+
+            const relData = relRes.ok ? await relRes.json() : { data: [] };
+            const mainTopData = mainTopRes.ok ? await mainTopRes.json() : { data: [] };
+
+            const relatedArtists = relData.data || [];
+            const mainTopTracks = mainTopData.data || [];
+
+            const queuePromises = relatedArtists.slice(0, 7).map(async (a) => {
+              try {
+                const topRes = await fetch(`https://api.deezer.com/artist/${a.id}/top?limit=1`);
+                if (!topRes.ok) return null;
+                const topData = await topRes.json();
+                const track = topData.data?.[0];
+                if (track) {
+                  return {
+                    id: `radio-rec-${track.id}`,
+                    title: track.title.toUpperCase(),
+                    artist: track.artist?.name || a.name,
+                    album: track.album?.title || 'Up Next Radio',
+                    duration: track.duration || 210,
+                    cover: track.album?.cover_big || track.album?.cover_medium,
+                    previewUrl: track.preview || null,
+                    genre: 'Radio Mix'
+                  };
+                }
+              } catch (e) {}
+              return null;
+            });
+
+            const relatedTracks = (await Promise.all(queuePromises)).filter(Boolean);
+
+            const mainTracks = mainTopTracks
+              .filter(t => !title || !t.title.toLowerCase().includes(title.toLowerCase()))
+              .slice(0, 2)
+              .map(track => ({
+                id: `radio-rec-${track.id}`,
+                title: track.title.toUpperCase(),
+                artist: track.artist?.name || mainArtist.name,
+                album: track.album?.title || 'Up Next Radio',
+                duration: track.duration || 210,
+                cover: track.album?.cover_big || track.album?.cover_medium,
+                previewUrl: track.preview || null,
+                genre: 'Radio Mix'
+              }));
+
+            const combinedTracks = [];
+            if (mainTracks[0]) combinedTracks.push(mainTracks[0]);
+            relatedTracks.forEach((t, idx) => {
+              combinedTracks.push(t);
+              if (idx === 2 && mainTracks[1]) combinedTracks.push(mainTracks[1]);
+            });
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: true, mainArtist: mainArtist.name, tracks: combinedTracks }));
+          } catch (err) {
+            console.error('Radio recommendations error:', err);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message, tracks: [] }));
+          }
+        });
       }
     }
   ]

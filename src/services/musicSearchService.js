@@ -141,10 +141,10 @@ export class MusicSearchService {
   }
 
   /**
-   * Generates a smart Up Next queue tailored to a selected track:
+   * Generates a smart YouTube-style Up Next radio queue tailored to a selected track:
    * 1. The selected track is at index 0.
-   * 2. Curates other top hits from the same artist worldwide.
-   * 3. Supplements with related hits from the catalog/favorites.
+   * 2. Fetches algorithmic cross-artist radio recommendations (related artists + multi-artist hit songs).
+   * 3. Supplements with top companion tracks worldwide.
    * 4. Excludes duplicate titles matching the query so the queue is never flooded with the same song title.
    */
   async getSmartQueueForTrack(track, fallbackPool = []) {
@@ -155,11 +155,45 @@ export class MusicSearchService {
 
     const queue = [track];
     const seenTitles = new Set([baseTitle]);
+    const seenArtists = new Set();
+    if (artistName) seenArtists.add(artistName.toLowerCase());
 
-    // 1. Fetch other top tracks from this exact artist worldwide
+    // 1. Primary: Algorithmic Multi-Artist YouTube/Deezer Radio Recommendations
     if (artistName && navigator.onLine) {
       try {
-        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=15`);
+        const radioRes = await fetch(`/api/radio-recommendations?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(baseTitle)}`);
+        if (radioRes.ok) {
+          const radioData = await radioRes.json();
+          if (radioData.tracks && radioData.tracks.length > 0) {
+            radioData.tracks.forEach(t => {
+              const titleUpper = (t.title || '').trim().toUpperCase();
+              if (!seenTitles.has(titleUpper) && titleUpper !== baseTitle) {
+                seenTitles.add(titleUpper);
+                queue.push({
+                  id: t.id || `radio-${Math.random().toString(36).slice(2, 9)}`,
+                  title: titleUpper,
+                  artist: t.artist,
+                  album: t.album || 'Up Next Radio',
+                  duration: t.duration || 210,
+                  cover: t.cover || DEFAULT_FALLBACK_COVER,
+                  genre: t.genre || 'Radio Mix',
+                  audioUrl: t.previewUrl || null,
+                  needsResolution: true,
+                  lyrics: `[00:00.00] ${t.title} - ${t.artist}\n[00:10.00] MUSE Up Next Radio Mix`
+                });
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Radio recommendations endpoint fallback:', err);
+      }
+    }
+
+    // 2. Secondary: Complementary artist tracks from worldwide catalog
+    if (queue.length < 10 && artistName && navigator.onLine) {
+      try {
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=12`);
         if (res.ok) {
           const data = await res.json();
           (data.results || []).forEach(t => {
@@ -176,7 +210,7 @@ export class MusicSearchService {
                 genre: t.primaryGenreName || track.genre || 'Pop',
                 audioUrl: t.previewUrl || null,
                 needsResolution: true,
-                lyrics: `[00:00.00] ${t.trackName} - ${t.artistName}\n[00:10.00] Melo Up Next Radio`
+                lyrics: `[00:00.00] ${t.trackName} - ${t.artistName}\n[00:10.00] MUSE Up Next Radio`
               });
             }
           });
@@ -186,7 +220,7 @@ export class MusicSearchService {
       }
     }
 
-    // 2. Add diverse recommendations from fallback catalog or sample tracks
+    // 3. Fallback: Add diverse recommendations from catalog or sample tracks
     const pool = (fallbackPool && fallbackPool.length > 0) ? fallbackPool : SAMPLE_TRACKS;
     for (const t of pool) {
       if (queue.length >= 25) break;

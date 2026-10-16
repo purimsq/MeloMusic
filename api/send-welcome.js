@@ -63,12 +63,12 @@ export default async function handler(req, res) {
       `;
 
     const mailOptions = {
-      from: `"Melo Music" <${emailUser}>`,
+      from: `"MUSE Music" <${emailUser}>`,
       to: email,
-      subject: `Welcome to Melo, ${name || 'Music Lover'} — Your High-Fidelity Sound Sanctuary Is Ready`,
+      subject: `Welcome to MUSE, ${name || 'Music Lover'} — Your High-Fidelity Sound Sanctuary Is Ready`,
       attachments: [
         {
-          filename: 'melo-logo.png',
+          filename: 'muse-logo.png',
           path: path.resolve(process.cwd(), 'public/icons/logo.png'),
           cid: 'melologo'
         }
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Welcome to Melo</title>
+          <title>Welcome to MUSE</title>
           <style>
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #EBEBE9; margin: 0; padding: 32px 12px; color: #121212; -webkit-font-smoothing: antialiased; }
             .wrapper { max-width: 620px; margin: 0 auto; background: #FFFFFF; border-radius: 32px; padding: 44px 36px; box-shadow: 0 16px 40px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.06); }
@@ -106,14 +106,14 @@ export default async function handler(req, res) {
           <div class="wrapper">
             <!-- Brand Logo Header -->
             <div class="logo-wrap">
-              <img src="cid:melologo" width="82" height="82" alt="Melo Logo" style="display: block; margin: 0 auto; border-radius: 24px; box-shadow: 0 10px 28px rgba(0,0,0,0.14);" />
+              <img src="cid:melologo" width="82" height="82" alt="MUSE Logo" style="display: block; margin: 0 auto; border-radius: 24px; box-shadow: 0 10px 28px rgba(0,0,0,0.14);" />
               <div style="margin-top: 14px;">
                 <span class="badge-tag">Official Member Onboarding</span>
               </div>
             </div>
 
             <!-- Executive Welcome Headline -->
-            <h1 style="text-align: center;">Welcome to Melo, ${name || 'Music Lover'}</h1>
+            <h1 style="text-align: center;">Welcome to MUSE, ${name || 'Music Lover'}</h1>
             <p class="lead" style="text-align: center;">
               Your personalized sound sanctuary has been crafted and tuned to perfection. We are thrilled to welcome you to a distraction-free, studio-grade listening experience designed around what matters most: the music.
             </p>
@@ -179,27 +179,27 @@ export default async function handler(req, res) {
               <ul style="margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.55; color: #2E332E;">
                 <li style="margin-bottom: 4px;"><strong>Instant Offline Save:</strong> Tap the heart icon on any playing song — it will immediately start caching with live spinner feedback.</li>
                 <li style="margin-bottom: 4px;"><strong>Sound Sculpting:</strong> Tap the equalizer sliders icon on the top right of the player to enhance the bass or vocal clarity.</li>
-                <li><strong>Install to Home Screen:</strong> Add Melo as a PWA on your mobile browser for a native full-screen app experience with gesture navigation.</li>
+                <li><strong>Native APK App:</strong> Install MUSE directly as a native Android app on your mobile device for uninterrupted background audio.</li>
               </ul>
             </div>
 
             <!-- CTA Button -->
             <div class="cta-box">
-              <a href="https://melomusic.vercel.app" class="btn-cta">Open Melo & Start Listening</a>
+              <a href="https://musemusic.vercel.app" class="btn-cta">Open MUSE & Start Listening</a>
             </div>
 
             <!-- Executive Signoff -->
             <div class="signoff">
-              We built Melo with the belief that music is not just background noise — it is an emotional sanctuary. Thank you for making Melo your sound home.<br><br>
+              We built MUSE with the belief that music is not just background noise — it is an emotional sanctuary. Thank you for making MUSE your sound home.<br><br>
               <strong>Warm regards,</strong><br>
-              The Melo Sound Engineering & Acoustic Architecture Team
+              The MUSE Sound Engineering & Acoustic Architecture Team
             </div>
 
             <!-- Footer -->
             <div class="footer">
-              © 2026 Melo Music Inc. All rights reserved. • High-Fidelity Audio Architecture<br>
-              This confirmation was dispatched because your account completed the Melo universe onboarding.<br>
-              Melo Music • Designed with luxury minimalism & zero compromises.
+              © 2026 MUSE Music Inc. All rights reserved. • High-Fidelity Audio Architecture<br>
+              This confirmation was dispatched because your account completed the MUSE universe onboarding.<br>
+              MUSE Music • Designed with luxury minimalism & zero compromises.
             </div>
           </div>
         </body>

@@ -464,9 +464,9 @@ export class AudioEngine {
       }
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: this.currentTrack.title || 'Melo Track',
-          artist: this.currentTrack.artist || 'Melo Artist',
-          album: this.currentTrack.album || 'Melo',
+          title: this.currentTrack.title || 'MUSE Track',
+          artist: this.currentTrack.artist || 'MUSE Artist',
+          album: this.currentTrack.album || 'MUSE',
           artwork: [
             { src: coverUrl, sizes: '96x96', type: 'image/jpeg' },
             { src: coverUrl, sizes: '128x128', type: 'image/jpeg' },
