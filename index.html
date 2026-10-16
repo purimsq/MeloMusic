@@ -32,13 +32,17 @@
     </style>
     <script>
       // Native Android background audio protection:
-      // Keeps WebViews and embedded players playing seamlessly when the phone screen is locked or app minimized
+      // Prevents YouTube and web media from pausing on minimize or screen off
       try {
-        Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
-        Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
-        window.addEventListener('blur', (e) => {
-          e.stopImmediatePropagation();
-        }, true);
+        Object.defineProperties(document, {
+          hidden: { get: () => false, configurable: true },
+          visibilityState: { get: () => 'visible', configurable: true },
+          webkitHidden: { get: () => false, configurable: true },
+          webkitVisibilityState: { get: () => 'visible', configurable: true }
+        });
+        window.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+        document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+        window.addEventListener('blur', (e) => e.stopImmediatePropagation(), true);
       } catch (e) {}
     </script>
   </head>
@@ -59,8 +63,8 @@
       </defs>
     </svg>
 
-    <!-- Hidden Background YouTube Audio Player Container for Ad-Free Master Streaming -->
-    <div id="melo-yt-container" style="position: fixed; width: 1px; height: 1px; opacity: 0.001; pointer-events: none; left: -100px; bottom: -100px; z-index: -999;"></div>
+    <!-- Background YouTube Audio Player Container with In-Viewport Layout to Prevent Offscreen Throttling -->
+    <div id="melo-yt-container" style="position: fixed; width: 280px; height: 200px; left: 0; top: 0; pointer-events: none; opacity: 0.01; z-index: 0;"></div>
 
     <!-- App Root -->
     <div id="app"></div>

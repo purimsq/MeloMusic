@@ -61,6 +61,8 @@ public class MainActivity extends BridgeActivity {
                 settings.setDatabaseEnabled(true);
                 settings.setJavaScriptEnabled(true);
                 settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+                // Set Desktop Chrome User-Agent so YouTube runs full desktop player without mobile background pause restrictions
+                settings.setUserAgentString("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
 
                 // Inject Native Music Bridge for Dynamic Island & Foreground Service
                 webView.addJavascriptInterface(new MusicBridge(this), "AndroidMusicBridge");
@@ -104,12 +106,18 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         super.onPause();
         keepWebViewAlive();
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().postDelayed(this::keepWebViewAlive, 100);
+        }
     }
 
     @Override
     public void onStop() {
         super.onStop();
         keepWebViewAlive();
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().postDelayed(this::keepWebViewAlive, 100);
+        }
     }
 
     private void keepWebViewAlive() {

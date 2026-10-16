@@ -167,7 +167,7 @@ export class AudioEngine {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         this.savePlaybackSessionState();
-        if (!document.hidden && this.isPlaying && this.currentMode === 'yt' && this.ytPlayer) {
+        if (this.isPlaying && this.currentMode === 'yt' && this.ytPlayer) {
           try {
             if (typeof this.ytPlayer.getPlayerState === 'function') {
               const state = this.ytPlayer.getPlayerState();
@@ -301,21 +301,12 @@ export class AudioEngine {
     } else if (state === window.YT.PlayerState.PAUSED) {
       if (this.isPlaying && !this.userRequestedPause) {
         // Android background playback keep-alive: screen locked or app minimized
-        try {
-          if (this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
-            this.ytPlayer.playVideo();
-            return;
+        setTimeout(() => {
+          if (this.isPlaying && !this.userRequestedPause && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
+            try { this.ytPlayer.playVideo(); } catch (e) {}
           }
-        } catch (e) {}
-
-        // If YouTube is blocked from background playback, seamlessly fall back to direct audio stream
-        if (this.currentTrack?.audioUrl) {
-          this.currentMode = 'html5';
-          this.audio.src = this.currentTrack.audioUrl;
-          this.audio.currentTime = this.currentTime || 0;
-          this.audio.play().catch(() => {});
-          return;
-        }
+        }, 60);
+        return;
       }
       this.isPlaying = false;
       this.stopYouTubeProgressTracker();
@@ -808,71 +799,70 @@ export class AudioEngine {
       return;
     }
 
-    // 3. Online Track: Prioritize direct audio stream for resilient background playback, instant buffering & equalizer support
+    // 3. Online Track: Stream full master track ad-free from YouTube (full length, not 30-sec preview!)
     this.isLoadingTrack = true;
     this.notify('loadingChange', { isLoading: true, track });
 
-    let streamUrl = track.audioUrl;
-    if (streamUrl) {
-      this.currentMode = 'html5';
-      this.stopYouTubeProgressTracker();
-      if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
-        try { this.ytPlayer.pauseVideo(); } catch (e) {}
+    let youtubeId = track.youtubeId;
+    if (!youtubeId && navigator.onLine) {
+      youtubeId = await musicSearchService.resolveYouTubeVideoId(track);
+      if (youtubeId) {
+        track.youtubeId = youtubeId;
       }
-      this.audio.src = streamUrl;
-      this.audio.loop = false;
-      this.audio.load();
-      const startSec = this.pendingResumeTime || 0;
-      this.pendingResumeTime = 0;
-      if (startSec > 0) {
-        this.audio.currentTime = startSec;
-      }
-      if (autoPlay) {
-        this.play();
-      }
-      this.isLoadingTrack = false;
-      this.notify('loadingChange', { isLoading: false, track });
-    } else {
-      // Fallback to YouTube if no direct audioUrl is present
-      let youtubeId = track.youtubeId;
-      if (!youtubeId && navigator.onLine) {
-        youtubeId = await musicSearchService.resolveYouTubeVideoId(track);
-        if (youtubeId) {
-          track.youtubeId = youtubeId;
-        }
+    }
+
+    let playedViaYouTube = false;
+    if (youtubeId && navigator.onLine) {
+      if (!this.ytPlayer || !this.ytReady) {
+        await Promise.race([
+          this.initYouTubePlayer(),
+          new Promise((r) => setTimeout(() => r(null), 3500))
+        ]);
       }
 
-      if (youtubeId && navigator.onLine) {
-        if (!this.ytPlayer || !this.ytReady) {
-          await Promise.race([
-            this.initYouTubePlayer(),
-            new Promise((r) => setTimeout(() => r(null), 3500))
-          ]);
-        }
+      if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
+        this.currentMode = 'yt';
+        this.audio.pause();
+        const startSec = this.pendingResumeTime || 0;
+        this.pendingResumeTime = 0;
+        this.ytPlayer.loadVideoById({
+          videoId: youtubeId,
+          startSeconds: startSec
+        });
 
-        if (this.ytPlayer && typeof this.ytPlayer.loadVideoById === 'function') {
-          this.currentMode = 'yt';
-          this.audio.pause();
-          const startSec = this.pendingResumeTime || 0;
-          this.pendingResumeTime = 0;
-          this.ytPlayer.loadVideoById({
-            videoId: youtubeId,
-            startSeconds: startSec
-          });
-
-          if (autoPlay) {
-            this.isPlaying = true;
-            this.startYouTubeProgressTracker();
-            this.updateMediaSessionPlaybackState('playing');
-          } else {
-            setTimeout(() => {
-              if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
-                this.ytPlayer.pauseVideo();
-                this.updateMediaSessionPlaybackState('paused');
-              }
-            }, 100);
-          }
+        if (autoPlay) {
+          this.isPlaying = true;
+          this.startYouTubeProgressTracker();
+          this.updateMediaSessionPlaybackState('playing');
+        } else {
+          setTimeout(() => {
+            if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+              this.ytPlayer.pauseVideo();
+              this.updateMediaSessionPlaybackState('paused');
+            }
+          }, 100);
         }
+        playedViaYouTube = true;
+      }
+    }
+
+    // Only fallback to audioUrl if YouTube was completely unavailable or failed
+    if (!playedViaYouTube) {
+      if (track.audioUrl) {
+        this.currentMode = 'html5';
+        this.stopYouTubeProgressTracker();
+        if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+          try { this.ytPlayer.pauseVideo(); } catch (e) {}
+        }
+        this.audio.src = track.audioUrl;
+        this.audio.loop = false;
+        this.audio.load();
+        const startSec = this.pendingResumeTime || 0;
+        this.pendingResumeTime = 0;
+        if (startSec > 0) {
+          this.audio.currentTime = startSec;
+        }
+        if (autoPlay) this.play();
       } else {
         window.dispatchEvent(new CustomEvent('melo-toast', {
           detail: {
@@ -880,9 +870,9 @@ export class AudioEngine {
             isSuccess: false
           }
         }));
-        this.isLoadingTrack = false;
-        this.notify('loadingChange', { isLoading: false, track });
       }
+      this.isLoadingTrack = false;
+      this.notify('loadingChange', { isLoading: false, track });
     }
 
     // Add to history
