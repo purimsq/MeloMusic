@@ -252,6 +252,19 @@ const playlistViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/playlistVi
 assert(playlistViewJs.includes('Icons.check(11)'), 'playlistView.js shows clean check icon on liked songs');
 assert(!playlistViewJs.includes('✓ Offline Ready'), 'playlistView.js does not render verbose Offline Ready text');
 
+// 23. Smart Up Next Queue & Recommendation Suggestions (No Duplicate Title Flooding)
+console.log('\n--- 23. Smart Up Next Queue & Recommendation Suggestions ---');
+const searchViewJs = fs.readFileSync(path.join(projectRoot, 'src/ui/searchView.js'), 'utf8');
+assert(searchViewJs.includes('getSmartQueueForTrack'), 'searchView.js calls getSmartQueueForTrack when selecting search result');
+assert(!searchViewJs.includes('audioEngine.setQueue(currentResults'), 'searchView.js does not dump raw search results into queue');
+
+const queueModalJs = fs.readFileSync(path.join(projectRoot, 'src/ui/queueModal.js'), 'utf8');
+assert(queueModalJs.includes('getSmartQueueForTrack'), 'queueModal.js proactively enriches low queue with smart suggestions on open');
+
+const musicSearchServiceJs = fs.readFileSync(path.join(projectRoot, 'src/services/musicSearchService.js'), 'utf8');
+assert(musicSearchServiceJs.includes('getSmartQueueForTrack(track'), 'musicSearchService.js implements getSmartQueueForTrack');
+assert(musicSearchServiceJs.includes('titleUpper !== baseTitle'), 'musicSearchService excludes duplicate titles matching the searched track title');
+
 console.log(`\n==========================================`);
 console.log(`RESULTS: ${passedTests}/${totalTests} tests passed`);
 console.log(`==========================================\n`);

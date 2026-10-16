@@ -1,5 +1,5 @@
 // Enterprise Live Music Search Service (Worldwide Catalog, Ad-Free YouTube Playback & Real Artist Face Portraits)
-import { DEFAULT_FALLBACK_COVER } from '../data/samples.js';
+import { DEFAULT_FALLBACK_COVER, SAMPLE_TRACKS } from '../data/samples.js';
 
 export class MusicSearchService {
   constructor() {
@@ -138,6 +138,66 @@ export class MusicSearchService {
     }
 
     return null;
+  }
+
+  /**
+   * Generates a smart Up Next queue tailored to a selected track:
+   * 1. The selected track is at index 0.
+   * 2. Curates other top hits from the same artist worldwide.
+   * 3. Supplements with related hits from the catalog/favorites.
+   * 4. Excludes duplicate titles matching the query so the queue is never flooded with the same song title.
+   */
+  async getSmartQueueForTrack(track, fallbackPool = []) {
+    if (!track) return [];
+
+    const baseTitle = (track.title || '').trim().toUpperCase();
+    const artistName = (track.artist || '').trim();
+
+    const queue = [track];
+    const seenTitles = new Set([baseTitle]);
+
+    // 1. Fetch other top tracks from this exact artist worldwide
+    if (artistName && navigator.onLine) {
+      try {
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(artistName)}&media=music&entity=song&limit=15`);
+        if (res.ok) {
+          const data = await res.json();
+          (data.results || []).forEach(t => {
+            const titleUpper = (t.trackName || '').trim().toUpperCase();
+            if (!seenTitles.has(titleUpper) && titleUpper !== baseTitle) {
+              seenTitles.add(titleUpper);
+              queue.push({
+                id: `rel-track-${t.trackId}`,
+                title: titleUpper,
+                artist: t.artistName || artistName,
+                album: t.collectionName || 'Single',
+                duration: t.trackTimeMillis ? Math.round(t.trackTimeMillis / 1000) : 210,
+                cover: t.artworkUrl100 ? t.artworkUrl100.replace('100x100bb', '600x600bb') : DEFAULT_FALLBACK_COVER,
+                genre: t.primaryGenreName || track.genre || 'Pop',
+                audioUrl: t.previewUrl || null,
+                needsResolution: true,
+                lyrics: `[00:00.00] ${t.trackName} - ${t.artistName}\n[00:10.00] Melo Up Next Radio`
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Artist recommendation fetch fallback:', e);
+      }
+    }
+
+    // 2. Add diverse recommendations from fallback catalog or sample tracks
+    const pool = (fallbackPool && fallbackPool.length > 0) ? fallbackPool : SAMPLE_TRACKS;
+    for (const t of pool) {
+      if (queue.length >= 25) break;
+      const titleUpper = (t.title || '').trim().toUpperCase();
+      if (!seenTitles.has(titleUpper) && titleUpper !== baseTitle) {
+        seenTitles.add(titleUpper);
+        queue.push(t);
+      }
+    }
+
+    return queue;
   }
 }
 

@@ -280,13 +280,24 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.btn-row-like') || e.target.closest('.btn-add-queue') || e.target.closest('.btn-row-add-pl')) return;
         const trackId = row.dataset.id;
-        const idx = currentResults.findIndex(t => t.id === trackId);
         const track = currentResults.find(t => t.id === trackId);
+        if (!track) return;
 
-        if (idx !== -1 && audioEngine) {
-          audioEngine.setQueue(currentResults, idx, true);
-        } else if (track) {
+        // Immediately load and play the clicked track
+        if (audioEngine) {
           audioEngine.loadTrack(track, true);
+
+          // Intelligently generate a curated Up Next queue (artist's other top hits + related suggestions)
+          // rather than flooding the queue with duplicate query-matched search results!
+          musicSearchService.getSmartQueueForTrack(track, SAMPLE_TRACKS).then(curatedQueue => {
+            if (curatedQueue && curatedQueue.length > 1 && audioEngine.currentTrack?.id === track.id) {
+              audioEngine.queue = curatedQueue;
+              audioEngine.queueIndex = 0;
+              audioEngine.notify('queueChange', { queue: audioEngine.queue, index: 0 });
+            }
+          }).catch(err => {
+            console.warn('Smart queue generation fallback:', err);
+          });
         }
 
         if (onSelectTrack && track) {

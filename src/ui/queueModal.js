@@ -1,6 +1,7 @@
 // UI: Queue & Up Next Sheet Modal with Loading Shimmer & Unnumbered Rows
 import { Icons } from './icons.js';
-import { DEFAULT_FALLBACK_COVER } from '../data/samples.js';
+import { DEFAULT_FALLBACK_COVER, SAMPLE_TRACKS } from '../data/samples.js';
+import { musicSearchService } from '../services/musicSearchService.js';
 
 export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
   let isOpen = false;
@@ -166,7 +167,20 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
       container.querySelector('#queue-sheet-overlay')?.classList.add('open');
     }, 10);
 
-    // Let it load a bit smoothly before rendering tracks
+    // If upcoming queue is low, proactively resolve smart suggestions for the current track
+    const currentTrack = audioEngine.currentTrack;
+    const upNext = (audioEngine.queue || []).slice((audioEngine.queueIndex || 0) + 1);
+    if (currentTrack && upNext.length < 3) {
+      musicSearchService.getSmartQueueForTrack(currentTrack, SAMPLE_TRACKS).then(curated => {
+        if (curated && curated.length > 1 && audioEngine.currentTrack?.id === currentTrack.id) {
+          audioEngine.queue = curated;
+          audioEngine.queueIndex = 0;
+          if (isOpen && !isLoading) update();
+        }
+      }).catch(() => {});
+    }
+
+    // Let it load smoothly with shimmer before rendering tracks
     setTimeout(() => {
       if (isOpen) {
         isLoading = false;
