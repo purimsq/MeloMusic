@@ -27,6 +27,7 @@ export class AudioEngine {
     this.duration = 0;
     this.volume = 0.85;
     this.isMuted = false;
+    this.userRequestedPause = false;
 
     // Web Audio API Equalizer Nodes
     this.audioContext = null;
@@ -214,11 +215,24 @@ export class AudioEngine {
       this.notify('loadingChange', { isLoading: false, track: this.currentTrack });
       this.notify('playStateChange', { isPlaying: true });
     } else if (state === window.YT.PlayerState.PAUSED) {
-      this.isPlaying = false;
-      this.stopYouTubeProgressTracker();
-      this.stopSilentAudioCarrier();
-      this.updateMediaSessionPlaybackState('paused');
-      this.notify('playStateChange', { isPlaying: false });
+      if (this.userRequestedPause) {
+        this.isPlaying = false;
+        this.stopYouTubeProgressTracker();
+        this.stopSilentAudioCarrier();
+        this.updateMediaSessionPlaybackState('paused');
+        this.notify('playStateChange', { isPlaying: false });
+      } else if (typeof document !== 'undefined' && document.hidden) {
+        // Backgrounding / screen turn off: keep audio carrier alive and maintain lockscreen controls
+        this.startSilentAudioCarrier();
+        this.updateMediaSessionPlaybackState('playing');
+        try { this.ytPlayer?.playVideo(); } catch (e) {}
+      } else {
+        this.isPlaying = false;
+        this.stopYouTubeProgressTracker();
+        this.stopSilentAudioCarrier();
+        this.updateMediaSessionPlaybackState('paused');
+        this.notify('playStateChange', { isPlaying: false });
+      }
     } else if (state === window.YT.PlayerState.BUFFERING) {
       this.isLoadingTrack = true;
       this.notify('loadingChange', { isLoading: true, track: this.currentTrack });
@@ -524,6 +538,7 @@ export class AudioEngine {
    */
   async loadTrack(track, autoPlay = true) {
     if (!track) return;
+    this.userRequestedPause = false;
     this.currentTrack = track;
     this.currentTime = 0;
     this.duration = track.duration || 0;
@@ -667,6 +682,7 @@ export class AudioEngine {
   }
 
   async play() {
+    this.userRequestedPause = false;
     if (!this.currentTrack && this.queue.length > 0) {
       this.loadTrack(this.queue[this.queueIndex], true);
       return;
@@ -700,6 +716,7 @@ export class AudioEngine {
   }
 
   pause() {
+    this.userRequestedPause = true;
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();
       this.stopSilentAudioCarrier();
