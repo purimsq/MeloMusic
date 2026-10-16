@@ -1,5 +1,6 @@
 // Enterprise Live Music Search Service (Worldwide Catalog, Ad-Free YouTube Playback & Real Artist Face Portraits)
 import { DEFAULT_FALLBACK_COVER, SAMPLE_TRACKS } from '../data/samples.js';
+import { resolveApiUrl } from '../config/api.js';
 
 export class MusicSearchService {
   constructor() {
@@ -71,7 +72,7 @@ export class MusicSearchService {
 
     try {
       // Try local backend proxy to Deezer artist API first (returns real face portraits)
-      const res = await fetch(`/api/artist-search?q=${encodeURIComponent(trimmed)}`);
+      const res = await fetch(resolveApiUrl(`/api/artist-search?q=${encodeURIComponent(trimmed)}`));
       if (res.ok) {
         const data = await res.json();
         if (data.artists && data.artists.length > 0) {
@@ -120,7 +121,7 @@ export class MusicSearchService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-      const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(q)}`, {
+      const res = await fetch(resolveApiUrl(`/api/youtube-search?q=${encodeURIComponent(q)}`), {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -167,7 +168,7 @@ export class MusicSearchService {
     if (artistName && navigator.onLine) {
       try {
         const excludeParam = encodeURIComponent(Array.from(seenTitles).slice(-15).join(','));
-        const radioRes = await fetch(`/api/radio-recommendations?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(baseTitle)}&exclude=${excludeParam}`);
+        const radioRes = await fetch(resolveApiUrl(`/api/radio-recommendations?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(baseTitle)}&exclude=${excludeParam}`));
         if (radioRes.ok) {
           const radioData = await radioRes.json();
           if (radioData.tracks && radioData.tracks.length > 0) {

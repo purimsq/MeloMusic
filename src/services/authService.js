@@ -11,6 +11,7 @@ import {
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { Storage } from './storage.js';
 import { networkService } from './networkService.js';
+import { resolveApiUrl } from '../config/api.js';
 
 class AuthService {
   constructor() {
@@ -120,7 +121,7 @@ class AuthService {
     this.lastDevCode = code;
 
     try {
-      const res = await fetch('/api/send-otp', {
+      const res = await fetch(resolveApiUrl('/api/send-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: this.pendingOtp.email, code, name })
@@ -303,7 +304,7 @@ class AuthService {
     if (!email) return;
 
     try {
-      await fetch('/api/send-welcome', {
+      await fetch(resolveApiUrl('/api/send-welcome'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name, artists })
