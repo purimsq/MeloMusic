@@ -3,14 +3,15 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {};
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'melo-bc6cc.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'melo-bc6cc',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'melo-bc6cc.firebasestorage.app',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '524826675391',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:524826675391:web:bfed19776d4af523635e0a',
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-HDBBY0XKGV'
+  apiKey: (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_FIREBASE_API_KEY) ? import.meta.env.VITE_FIREBASE_API_KEY : '',
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || 'melo-bc6cc.firebaseapp.com',
+  projectId: env.VITE_FIREBASE_PROJECT_ID || 'melo-bc6cc',
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || 'melo-bc6cc.firebasestorage.app',
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '524826675391',
+  appId: env.VITE_FIREBASE_APP_ID || '1:524826675391:web:bfed19776d4af523635e0a',
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || 'G-HDBBY0XKGV'
 };
 
 // Safe, resilient initialization

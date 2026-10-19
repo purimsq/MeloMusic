@@ -3,6 +3,7 @@ import { Icons } from './icons.js';
 import { Storage } from '../services/storage.js';
 import { DEFAULT_FALLBACK_COVER, SAMPLE_TRACKS } from '../data/samples.js';
 import { musicSearchService } from '../services/musicSearchService.js';
+import { getTrackArtworkUrl } from '../services/artworkService.js';
 
 export function renderPlaylistView(container, { playlist, audioEngine, onBack }) {
   let tracks = [...(playlist.tracks || [])];
@@ -55,6 +56,7 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
       const isCurrent = track.id === currentTrackId;
       const isLiked = Storage.isSongLiked(track.id);
       const isDownloaded = track.isDownloaded === true;
+      const isDevice = track.source === 'device' || track.isDeviceTrack;
 
       return `
         <div class="playlist-track-row ${isCurrent ? 'playing' : ''}" data-track-id="${track.id}" data-index="${i}">
@@ -64,11 +66,12 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
                 <span></span><span></span><span></span>
               </div>
             ` : (i + 1)}</span>
-            <img src="${track.cover || DEFAULT_FALLBACK_COVER}" alt="${track.title}" class="track-row-thumb" />
+            <img src="${getTrackArtworkUrl(track)}" alt="${track.title}" class="track-row-thumb" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
             <div class="track-row-details">
               <span class="track-row-title ${isCurrent ? 'active' : ''}">${track.title}</span>
               <span class="track-row-artist">
                 ${track.artist}
+                ${isDevice ? `<span style="font-size: 9.5px; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 6px; margin-left: 6px; color: var(--text-secondary); font-weight: 700;">DEVICE</span>` : ''}
                 ${playlist.id === 'playlist-liked-songs' ? `
                   <span class="download-status-badge ${isDownloaded ? 'downloaded' : 'downloading'}" id="pl-download-badge-${track.id}" title="${isDownloaded ? 'Downloaded for offline' : 'Downloading...'}">
                     ${isDownloaded ? Icons.check(11) : '<div class="melo-mini-spinner"></div>'}
@@ -115,13 +118,17 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
 
     return list.map(t => {
       const alreadyIn = tracks.some(existing => existing.id === t.id || (existing.title.toLowerCase() === t.title.toLowerCase() && existing.artist.toLowerCase() === t.artist.toLowerCase()));
+      const isDevice = t.source === 'device' || t.isDeviceTrack;
       return `
         <div class="track-row-item" style="padding: 10px 12px; background: rgba(0,0,0,0.02); border-radius: 16px; margin-bottom: 6px;">
           <div class="track-row-left">
-            <img class="track-row-thumb" src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" style="width: 40px; height: 40px; border-radius: 10px;" />
+            <img class="track-row-thumb" src="${getTrackArtworkUrl(t)}" alt="${t.title}" style="width: 40px; height: 40px; border-radius: 10px;" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
             <div class="track-row-info">
               <span class="track-row-title" style="font-size: 13.5px;">${t.title}</span>
-              <span class="track-row-artist" style="font-size: 11.5px;">${t.artist}</span>
+              <span class="track-row-artist" style="font-size: 11.5px;">
+                ${t.artist}
+                ${isDevice ? `<span style="font-size: 9.5px; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 6px; margin-left: 6px; color: var(--text-secondary); font-weight: 700;">DEVICE</span>` : ''}
+              </span>
             </div>
           </div>
           <div class="track-row-right">
@@ -159,7 +166,7 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
           <div class="playlist-hero-card">
             <div class="playlist-cover-scalloped" style="clip-path: url(#flower-mask-artist);">
               ${(tracks.length > 0 && tracks[0]?.cover) || playlist.cover ? `
-                <img src="${tracks[0]?.cover || playlist.cover}" alt="${playlist.title}" class="playlist-cover-img" id="playlist-hero-cover-img" />
+                <img src="${tracks.length > 0 ? getTrackArtworkUrl(tracks[0]) : (playlist.cover || DEFAULT_FALLBACK_COVER)}" alt="${playlist.title}" class="playlist-cover-img" id="playlist-hero-cover-img" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
               ` : `
                 <div class="playlist-hero-folder-empty" id="playlist-hero-folder-icon">
                   ${Icons.folderMusic(52)}
@@ -260,17 +267,26 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
     // Play All
     container.querySelector('#btn-playlist-play-all')?.addEventListener('click', () => {
       if (tracks.length > 0) {
-        audioEngine.isShuffle = false;
-        audioEngine.setQueue(tracks, 0, true);
+        const firstTrack = tracks[0];
+        const isDevice = firstTrack.source === 'device' || firstTrack.isDeviceTrack;
+        const targetSource = isDevice ? 'device' : 'youtube';
+        const sourceTracks = tracks.filter(t => (t.source === 'device' || t.isDeviceTrack) === isDevice);
+        audioEngine.sourceStates[targetSource].isShuffle = false;
+        audioEngine.setQueue(sourceTracks, 0, true, targetSource);
       }
     });
 
     // Shuffle Play
     container.querySelector('#btn-playlist-shuffle')?.addEventListener('click', () => {
       if (tracks.length > 0) {
-        audioEngine.isShuffle = true;
         const randIdx = Math.floor(Math.random() * tracks.length);
-        audioEngine.setQueue(tracks, randIdx, true);
+        const selectedTrack = tracks[randIdx];
+        const isDevice = selectedTrack.source === 'device' || selectedTrack.isDeviceTrack;
+        const targetSource = isDevice ? 'device' : 'youtube';
+        const sourceTracks = tracks.filter(t => (t.source === 'device' || t.isDeviceTrack) === isDevice);
+        const sourceRandIdx = sourceTracks.findIndex(t => t.id === selectedTrack.id);
+        audioEngine.sourceStates[targetSource].isShuffle = true;
+        audioEngine.setQueue(sourceTracks, Math.max(0, sourceRandIdx), true, targetSource);
       }
     });
 
@@ -346,10 +362,19 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
 
       searchDebounce = setTimeout(async () => {
         const results = await musicSearchService.search(q);
-        currentAddResults = results;
+        const deviceTracks = Storage.getDeviceTracksSync();
+        const deviceMatches = deviceTracks.filter(t =>
+          (t.title && t.title.toLowerCase().includes(q.toLowerCase())) ||
+          (t.artist && t.artist.toLowerCase().includes(q.toLowerCase()))
+        );
+        const combined = [...deviceMatches];
+        results.forEach(r => {
+          if (!combined.some(c => c.id === r.id)) combined.push(r);
+        });
+        currentAddResults = combined;
         isSearchingAdd = false;
         if (addResultsContainer) {
-          addResultsContainer.innerHTML = renderAddSearchResults(results);
+          addResultsContainer.innerHTML = renderAddSearchResults(combined);
           attachAddButtonEvents();
         }
       }, 260);
@@ -360,13 +385,18 @@ export function renderPlaylistView(container, { playlist, audioEngine, onBack })
   }
 
   function attachTrackEvents() {
-    // Individual Track Clicks
+    // Individual Track Clicks (source-aware)
     container.querySelectorAll('.playlist-track-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.btn-row-heart') || e.target.closest('.btn-remove-playlist-track')) return;
         const index = parseInt(row.dataset.index, 10);
         if (!isNaN(index) && tracks[index]) {
-          audioEngine.setQueue(tracks, index, true);
+          const clickedTrack = tracks[index];
+          const isDevice = clickedTrack.source === 'device' || clickedTrack.isDeviceTrack;
+          const targetSource = isDevice ? 'device' : 'youtube';
+          const sourceTracks = tracks.filter(t => (t.source === 'device' || t.isDeviceTrack) === isDevice);
+          const sourceIdx = sourceTracks.findIndex(t => t.id === clickedTrack.id);
+          audioEngine.setQueue(sourceTracks.length > 0 ? sourceTracks : [clickedTrack], Math.max(0, sourceIdx), true, targetSource);
         }
       });
     });

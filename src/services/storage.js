@@ -446,20 +446,38 @@ export const Storage = {
   },
 
   // --- DEVICE MUSIC (Scan & Play Local Audio Files) ---
+  _deviceTracksCache: [],
+
+  getDeviceTracksSync() {
+    return this._deviceTracksCache || [];
+  },
+
   async getDeviceTracks() {
     try {
       const stored = await get(KEYS.DEVICE_MUSIC);
-      return stored || [];
+      if (!Array.isArray(stored)) {
+        this._deviceTracksCache = [];
+        return [];
+      }
+      const mapped = stored.map(t => ({
+        ...t,
+        source: 'device',
+        isDeviceTrack: true
+      }));
+      this._deviceTracksCache = mapped;
+      return mapped;
     } catch (e) {
-      return [];
+      return this._deviceTracksCache || [];
     }
   },
 
   async saveDeviceTrack(trackInfo, fileBlob) {
     try {
       const trackId = `device-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-      // 1. Save binary audio blob under individual IndexedDB key
-      await set(`${KEYS.OFFLINE_AUDIO_PREFIX}${trackId}`, fileBlob);
+      // 1. Save binary audio blob under individual IndexedDB key if blob is provided
+      if (fileBlob) {
+        await set(`${KEYS.OFFLINE_AUDIO_PREFIX}${trackId}`, fileBlob);
+      }
 
       // 2. Save lightweight metadata in device music catalog
       const deviceTracks = await this.getDeviceTracks();
@@ -470,17 +488,71 @@ export const Storage = {
         album: trackInfo.album || 'Phone Storage',
         duration: trackInfo.duration || 210,
         cover: trackInfo.cover || null,
+        contentUri: trackInfo.contentUri || null,
+        filePath: trackInfo.filePath || '',
         isDeviceTrack: true,
-        blob: fileBlob
+        source: 'device',
+        blob: fileBlob || null
       };
 
       const serializableTrack = { ...newTrack, blob: null };
       deviceTracks.unshift(serializableTrack);
+      this._deviceTracksCache = deviceTracks;
       await set(KEYS.DEVICE_MUSIC, deviceTracks);
       return newTrack;
     } catch (err) {
       console.error('Failed to save device track:', err);
       return null;
+    }
+  },
+
+  async mergeMediaStoreTracks(msTracks) {
+    try {
+      if (!Array.isArray(msTracks) || msTracks.length === 0) return await this.getDeviceTracks();
+      const existing = await this.getDeviceTracks();
+      const existingIds = new Set(existing.map(t => t.mediaStoreId || t.contentUri || t.id));
+
+      const newTracks = [];
+      for (const t of msTracks) {
+        const key = t.mediaStoreId || t.contentUri || t.id;
+        if (!existingIds.has(key)) {
+          existingIds.add(key);
+          newTracks.push({
+            id: t.id || `device-ms-${t.mediaStoreId}`,
+            mediaStoreId: t.mediaStoreId,
+            title: t.title,
+            artist: t.artist || 'Device Music',
+            album: t.album || 'Phone Storage',
+            duration: t.duration || 210,
+            cover: t.cover || null,
+            contentUri: t.contentUri || null,
+            filePath: t.filePath || '',
+            isDeviceTrack: true,
+            source: 'device'
+          });
+        }
+      }
+
+      const merged = [...newTracks, ...existing];
+      this._deviceTracksCache = merged;
+      await set(KEYS.DEVICE_MUSIC, merged);
+      return merged;
+    } catch (err) {
+      console.error('Failed to merge MediaStore tracks:', err);
+      return await this.getDeviceTracks();
+    }
+  },
+
+  async removeDeviceTrack(trackId) {
+    try {
+      let list = await this.getDeviceTracks();
+      list = list.filter(t => t.id !== trackId);
+      this._deviceTracksCache = list;
+      await set(KEYS.DEVICE_MUSIC, list);
+      await del(`${KEYS.OFFLINE_AUDIO_PREFIX}${trackId}`);
+      return true;
+    } catch (e) {
+      return false;
     }
   },
 
@@ -529,3 +601,6 @@ export const Storage = {
     }
   }
 };
+
+Storage.getDeviceTracks().catch(() => {});
+

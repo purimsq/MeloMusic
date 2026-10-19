@@ -2,6 +2,7 @@
 import { Icons } from './icons.js';
 import { Storage } from '../services/storage.js';
 import { DEFAULT_FALLBACK_COVER } from '../data/samples.js';
+import { getTrackArtworkUrl } from '../services/artworkService.js';
 
 export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics, onOpenQueue, onOpenEqualizer }) {
   const currentTrack = audioEngine.currentTrack || audioEngine.queue[0];
@@ -60,7 +61,8 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
         <div class="artwork-flower-mask-wrap" id="artwork-mask-click">
           <div style="width: 100%; height: 100%; clip-path: url(#flower-mask-player); overflow: hidden; background: #222;">
             <img class="artwork-cover-img" id="player-cover-image" 
-                 src="${currentTrack ? (currentTrack.cover || DEFAULT_FALLBACK_COVER) : DEFAULT_FALLBACK_COVER}" 
+                 src="${currentTrack ? getTrackArtworkUrl(currentTrack) : DEFAULT_FALLBACK_COVER}" 
+                 onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'"
                  alt="${currentTrack ? currentTrack.title : 'Melo'}" />
           </div>
         </div>
@@ -190,15 +192,39 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     }
   });
 
+  const headerTitle = container.querySelector('.player-header-title');
+
+  function syncControlButtons() {
+    if (shuffleBtn) {
+      shuffleBtn.classList.toggle('active', audioEngine.isShuffle);
+    }
+    if (repeatBtn) {
+      repeatBtn.innerHTML = audioEngine.repeatMode === 'one' ? Icons.repeatOne(20) : Icons.repeat(20);
+      repeatBtn.classList.toggle('active', audioEngine.repeatMode !== 'off');
+    }
+    if (headerTitle) {
+      headerTitle.textContent = (audioEngine.activeSource === 'device') ? 'Device Music' : 'Now Playing';
+    }
+  }
+
+  syncControlButtons();
+
   audioEngine.subscribe('trackChange', (track) => {
     trackTitle.textContent = track.title;
     artistName.textContent = track.artist;
-    coverImg.src = track.cover || DEFAULT_FALLBACK_COVER;
+    // Reset artwork immediately to prevent previous track artwork remaining visible
+    coverImg.src = DEFAULT_FALLBACK_COVER;
+    coverImg.src = getTrackArtworkUrl(track);
     timeDisplay.innerHTML = `00:00 <span>|</span> ${formatTime(track.duration || 0)}`;
     updateCircleScrubber(0);
     const isNowLiked = Storage.isSongLiked(track.id);
     heartBtn.className = `btn-heart-convenient ${isNowLiked ? 'liked' : ''}`;
     heartBtn.innerHTML = Icons.heart(24, isNowLiked);
+    syncControlButtons();
+  });
+
+  audioEngine.subscribe('queueChange', () => {
+    syncControlButtons();
   });
 
   // Calculate circular angle from pointer

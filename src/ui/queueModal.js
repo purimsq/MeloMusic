@@ -2,6 +2,7 @@
 import { Icons } from './icons.js';
 import { DEFAULT_FALLBACK_COVER, SAMPLE_TRACKS } from '../data/samples.js';
 import { musicSearchService } from '../services/musicSearchService.js';
+import { getTrackArtworkUrl } from '../services/artworkService.js';
 
 export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
   let isOpen = false;
@@ -29,7 +30,7 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
           <!-- Header -->
           <div class="queue-header">
             <div class="queue-header-left">
-              <span class="queue-title">Playing Queue</span>
+              <span class="queue-title">${audioEngine.activeSource === 'device' ? 'Device Queue' : 'Playing Queue'}</span>
               <span class="queue-count">${queue.length} tracks</span>
             </div>
             <div class="queue-header-actions">
@@ -60,14 +61,17 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
                 <div class="queue-section-label">NOW PLAYING</div>
                 <div class="queue-track-row now-playing playlist-content-fade">
                   <div class="queue-thumb-wrap">
-                    <img src="${currentTrack.cover || DEFAULT_FALLBACK_COVER}" alt="${currentTrack.title}" class="queue-thumb" />
+                    <img src="${getTrackArtworkUrl(currentTrack)}" alt="${currentTrack.title}" class="queue-thumb" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
                     <div class="queue-now-playing-bars">
                       <span></span><span></span><span></span>
                     </div>
                   </div>
                   <div class="queue-track-info">
                     <span class="queue-track-title">${currentTrack.title}</span>
-                    <span class="queue-track-artist">${currentTrack.artist}</span>
+                    <span class="queue-track-artist">
+                      ${currentTrack.artist}
+                      ${(currentTrack.source === 'device' || currentTrack.isDeviceTrack) ? `<span style="font-size: 9.5px; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 6px; margin-left: 6px; color: var(--text-secondary); font-weight: 700;">DEVICE</span>` : ''}
+                    </span>
                   </div>
                   <span class="queue-track-duration">${formatTime(currentTrack.duration)}</span>
                 </div>
@@ -79,18 +83,22 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
                 <div class="queue-empty-state playlist-content-fade">
                   ${Icons.music(32)}
                   <p>No more tracks in queue</p>
-                  <span style="font-size: 12px; color: var(--text-secondary);">Add songs from home or playlists</span>
+                  <span style="font-size: 12px; color: var(--text-secondary);">${audioEngine.activeSource === 'device' ? 'End of device playback queue' : 'Add songs from home or playlists'}</span>
                 </div>
               ` : `
                 <div class="queue-tracks-list playlist-content-fade">
                   ${upNext.map((track, i) => {
                     const actualIdx = currentIndex + 1 + i;
+                    const isDevice = track.source === 'device' || track.isDeviceTrack;
                     return `
                       <div class="queue-track-row" data-index="${actualIdx}">
-                        <img src="${track.cover || DEFAULT_FALLBACK_COVER}" alt="${track.title}" class="queue-thumb" />
+                        <img src="${getTrackArtworkUrl(track)}" alt="${track.title}" class="queue-thumb" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
                         <div class="queue-track-info">
                           <span class="queue-track-title">${track.title}</span>
-                          <span class="queue-track-artist">${track.artist}</span>
+                          <span class="queue-track-artist">
+                            ${track.artist}
+                            ${isDevice ? `<span style="font-size: 9.5px; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 6px; margin-left: 6px; color: var(--text-secondary); font-weight: 700;">DEVICE</span>` : ''}
+                          </span>
                         </div>
                         <span class="queue-track-duration">${formatTime(track.duration)}</span>
                         <button class="btn-queue-remove" data-remove-index="${actualIdx}" title="Remove from queue">
@@ -167,13 +175,15 @@ export function renderQueueModal(container, { audioEngine, onSelectTrack }) {
       container.querySelector('#queue-sheet-overlay')?.classList.add('open');
     }, 10);
 
-    // If upcoming queue is low, proactively trigger endless auto-refill
-    const currentTrack = audioEngine.currentTrack;
-    const upNext = (audioEngine.queue || []).slice((audioEngine.queueIndex || 0) + 1);
-    if (currentTrack && upNext.length < 5) {
-      audioEngine.ensureQueueDepth().then(() => {
-        if (isOpen && !isLoading) update();
-      }).catch(() => {});
+    // If upcoming queue is low, proactively trigger endless auto-refill (YouTube mode ONLY)
+    if (audioEngine.activeSource === 'youtube') {
+      const currentTrack = audioEngine.currentTrack;
+      const upNext = (audioEngine.queue || []).slice((audioEngine.queueIndex || 0) + 1);
+      if (currentTrack && upNext.length < 5) {
+        audioEngine.ensureQueueDepth().then(() => {
+          if (isOpen && !isLoading) update();
+        }).catch(() => {});
+      }
     }
 
     // Let it load smoothly with shimmer before rendering tracks

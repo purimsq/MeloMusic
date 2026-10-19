@@ -4,6 +4,7 @@ import { musicSearchService } from '../services/musicSearchService.js';
 import { SAMPLE_TRACKS, DEFAULT_FALLBACK_COVER } from '../data/samples.js';
 import { Storage } from '../services/storage.js';
 import { networkService } from '../services/networkService.js';
+import { getTrackArtworkUrl } from '../services/artworkService.js';
 
 export function renderSearchView(container, { audioEngine, onSelectTrack }) {
   let searchTimeout = null;
@@ -22,7 +23,14 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
 
   function getOfflineLibraryTracks() {
     const liked = Storage.getLikedSongs();
-    return liked;
+    const deviceTracks = Storage.getDeviceTracksSync();
+    const combined = [...liked];
+    deviceTracks.forEach(dt => {
+      if (!combined.some(c => c.id === dt.id)) {
+        combined.push(dt);
+      }
+    });
+    return combined;
   }
 
   function buildHtml() {
@@ -34,7 +42,7 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
           <div class="home-section-header" style="margin-bottom: 0;">
             <div>
               <h2 class="section-title">Search</h2>
-              <p class="section-subtitle">${isOnline ? 'Real worldwide catalog & ad-free audio' : 'Offline Mode • Browsing downloaded vault'}</p>
+              <p class="section-subtitle">${isOnline ? 'Real worldwide catalog & ad-free audio' : 'Offline Mode • Browsing downloaded vault & device files'}</p>
             </div>
             <span class="section-badge" style="${isOnline ? '' : 'background: rgba(0,0,0,0.06); color: var(--text-secondary);'}">
               ${isOnline ? 'Worldwide' : 'Offline'}
@@ -49,7 +57,7 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
               </div>
               <h3 style="font-size: 13px; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;">Offline Mode Active</h3>
               <p style="font-size: 11px; color: var(--text-secondary); max-width: 270px; margin: 0 auto; line-height: 1.4;">
-                Online web search is paused while offline. You can search and listen to your downloaded Liked Songs.
+                Online web search is paused while offline. You can search your downloaded songs and local phone music.
               </p>
             </div>
           ` : ''}
@@ -57,7 +65,7 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
           <!-- Fixed Search Input Bar -->
           <div class="search-input-wrap">
             ${Icons.search(20)}
-            <input type="text" id="global-search-input" placeholder="${isOnline ? 'Search any song, artist, or album...' : 'Search in your downloaded songs...'}" autocomplete="off" />
+            <input type="text" id="global-search-input" placeholder="${isOnline ? 'Search any song, artist, or album...' : 'Search downloaded & device music...'}" autocomplete="off" />
             <button id="btn-clear-search" style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: none;">
               ${Icons.close(18)}
             </button>
@@ -118,7 +126,7 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
         <div style="text-align: center; padding: 40px 20px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 8px;">
           ${Icons.search(36)}
           <p style="font-weight: 600; font-size: 14px; color: var(--text-primary);">No tracks found</p>
-          <span style="font-size: 12px;">${isOnline ? 'Try searching for a different artist name or song title' : 'No matching songs found in your offline downloads'}</span>
+          <span style="font-size: 12px;">${isOnline ? 'Try searching for a different artist name or song title' : 'No matching songs found in your offline downloads or device files'}</span>
         </div>
       `;
     }
@@ -128,14 +136,18 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
     return tracks.map(t => {
       const isPlaying = currentId === t.id && engine?.isPlaying;
       const isLiked = Storage.isSongLiked(t.id);
+      const isDevice = t.source === 'device' || t.isDeviceTrack;
 
       return `
         <div class="track-row-item ${currentId === t.id ? 'playing' : ''} playlist-content-fade" data-id="${t.id}">
           <div class="track-row-left">
-            <img class="track-row-thumb" src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" loading="lazy" />
+            <img class="track-row-thumb" src="${getTrackArtworkUrl(t)}" alt="${t.title}" loading="lazy" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
             <div class="track-row-info">
               <span class="track-row-title">${t.title}</span>
-              <span class="track-row-artist">${t.artist}${t.album ? ` • ${t.album}` : ''}</span>
+              <span class="track-row-artist">
+                ${t.artist}${t.album ? ` • ${t.album}` : ''}
+                ${isDevice ? `<span style="font-size: 9.5px; background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 6px; margin-left: 6px; color: var(--text-secondary); font-weight: 700;">DEVICE</span>` : ''}
+              </span>
             </div>
           </div>
 
@@ -199,13 +211,23 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
         return;
       }
 
-      // If offline: search local downloaded vault only
+      // Query local device music and local samples synchronously without network
+      const deviceTracks = Storage.getDeviceTracksSync();
+      const deviceMatches = deviceTracks.filter(t =>
+        (t.title && t.title.toLowerCase().includes(q.toLowerCase())) ||
+        (t.artist && t.artist.toLowerCase().includes(q.toLowerCase())) ||
+        (t.album && t.album.toLowerCase().includes(q.toLowerCase()))
+      );
+
+      // If offline: search local downloaded vault + device tracks
       if (!isOnline) {
         const offlinePool = getOfflineLibraryTracks();
-        currentResults = offlinePool.filter(t =>
-          t.title.toLowerCase().includes(q.toLowerCase()) ||
-          t.artist.toLowerCase().includes(q.toLowerCase())
+        const offlineMatches = offlinePool.filter(t =>
+          (t.title && t.title.toLowerCase().includes(q.toLowerCase())) ||
+          (t.artist && t.artist.toLowerCase().includes(q.toLowerCase())) ||
+          (t.album && t.album.toLowerCase().includes(q.toLowerCase()))
         );
+        currentResults = offlineMatches;
         if (resultsContainer) {
           resultsContainer.innerHTML = renderResultsHtml(currentResults, audioEngine);
           attachTrackEvents();
@@ -225,10 +247,17 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
           t.artist.toLowerCase().includes(q.toLowerCase())
         );
 
-        const combined = [...realResults];
+        // Prepend device matches first for instant local access
+        const combined = [...deviceMatches];
+        realResults.forEach(r => {
+          if (!combined.some(c => c.id === r.id)) {
+            combined.push(r);
+          }
+        });
+
         localMatches.forEach(lm => {
           if (!combined.some(c => c.title.toLowerCase() === lm.title.toLowerCase())) {
-            combined.unshift(lm);
+            combined.push(lm);
           }
         });
 
@@ -275,7 +304,7 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
     const resultsContainer = container.querySelector('#search-results-list');
     if (!resultsContainer) return;
 
-    // Track clicks -> play & open player
+    // Track clicks -> play & open player with strict source isolation
     resultsContainer.querySelectorAll('.track-row-item').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.btn-row-like') || e.target.closest('.btn-add-queue') || e.target.closest('.btn-row-add-pl')) return;
@@ -283,10 +312,18 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
         const track = currentResults.find(t => t.id === trackId);
         if (!track) return;
 
-        // Immediately load and play the clicked track with smart queue
+        const isDevice = track.source === 'device' || track.isDeviceTrack;
         if (audioEngine) {
-          audioEngine.loadTrack(track, true);
-          musicSearchService.getSmartQueueForTrack(track, SAMPLE_TRACKS).catch(() => {});
+          if (isDevice) {
+            const allDeviceTracks = Storage.getDeviceTracksSync();
+            const idx = allDeviceTracks.findIndex(dt => dt.id === track.id);
+            const q = idx >= 0 ? allDeviceTracks : [track];
+            const startIdx = idx >= 0 ? idx : 0;
+            audioEngine.setQueue(q, startIdx, true, 'device');
+          } else {
+            audioEngine.loadTrack(track, true);
+            musicSearchService.getSmartQueueForTrack(track, SAMPLE_TRACKS).catch(() => {});
+          }
         }
 
         if (onSelectTrack && track) {
@@ -309,7 +346,7 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
       });
     });
 
-    // Add to Queue button
+    // Add to Queue button with strict source protection
     resultsContainer.querySelectorAll('.btn-add-queue').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -317,15 +354,25 @@ export function renderSearchView(container, { audioEngine, onSelectTrack }) {
         const trackId = row?.dataset.id;
         const track = currentResults.find(t => t.id === trackId);
         if (track && audioEngine) {
-          audioEngine.addToQueue(track);
-          btn.style.transform = 'scale(1.25)';
-          btn.style.backgroundColor = 'var(--accent-black)';
-          btn.style.color = '#FFFFFF';
-          setTimeout(() => {
-            btn.style.transform = 'none';
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-          }, 320);
+          const isDevice = track.source === 'device' || track.isDeviceTrack;
+          if ((isDevice && audioEngine.activeSource === 'device') || (!isDevice && audioEngine.activeSource === 'youtube')) {
+            audioEngine.addToQueue(track);
+            btn.style.transform = 'scale(1.25)';
+            btn.style.backgroundColor = 'var(--accent-black)';
+            btn.style.color = '#FFFFFF';
+            setTimeout(() => {
+              btn.style.transform = 'none';
+              btn.style.backgroundColor = '';
+              btn.style.color = '';
+            }, 320);
+          } else {
+            window.dispatchEvent(new CustomEvent('melo-toast', {
+              detail: {
+                message: isDevice ? 'Switch to Device mode to queue local tracks' : 'Switch to Online mode to queue online tracks',
+                isSuccess: false
+              }
+            }));
+          }
         }
       });
     });

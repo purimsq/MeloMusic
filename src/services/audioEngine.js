@@ -3,6 +3,30 @@ import { SAMPLE_TRACKS, DEFAULT_FALLBACK_COVER } from '../data/samples.js';
 import { Storage } from './storage.js';
 import { LyricsEngine } from './lyricsService.js';
 import { musicSearchService } from './musicSearchService.js';
+import { getTrackArtworkUrl } from './artworkService.js';
+
+export function isDeviceTrack(track) {
+  if (!track) return false;
+  return (
+    track.source === 'device' ||
+    track.isDeviceTrack === true ||
+    track.isDeviceMusic === true ||
+    (typeof track.id === 'string' && track.id.startsWith('device-')) ||
+    (typeof track.contentUri === 'string' && track.contentUri.length > 0) ||
+    (track.blob instanceof Blob)
+  );
+}
+
+const checkIsDeviceTrack = isDeviceTrack;
+
+function shuffleArray(array) {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 export class AudioEngine {
   constructor() {
@@ -14,13 +38,45 @@ export class AudioEngine {
     this.bgAudio.loop = true;
     this.bgAudio.volume = 0.001;
 
-    // Playback modes: 'yt' (ad-free YouTube master audio) or 'html5' (offline blob / device music)
+    // Playback modes: 'yt' (ad-free YouTube master audio), 'html5' (offline blob), or 'native' (Android MediaStore)
     this.currentMode = 'yt';
+
+    // Strictly Isolated Playback Modes: 'youtube' | 'device'
+    this.activeSource = 'youtube';
+    this.sourceStates = {
+      youtube: {
+        queue: [...SAMPLE_TRACKS],
+        originalQueue: [...SAMPLE_TRACKS],
+        queueIndex: 0,
+        isShuffle: false,
+        repeatMode: 'all',
+        history: [],
+        shuffleOrder: [],
+        shuffleIndex: 0,
+        currentTrack: null,
+        currentTime: 0,
+        duration: 0
+      },
+      device: {
+        queue: [],
+        originalQueue: [],
+        queueIndex: 0,
+        isShuffle: false,
+        repeatMode: 'all',
+        history: [],
+        shuffleOrder: [],
+        shuffleIndex: 0,
+        currentTrack: null,
+        currentTime: 0,
+        duration: 0
+      }
+    };
 
     // YouTube IFrame Player instance
     this.ytPlayer = null;
     this.ytReady = false;
     this.ytProgressInterval = null;
+    this.nativeProgressInterval = null;
 
     this.currentTrack = null;
     this.isPlaying = false;
@@ -87,14 +143,173 @@ export class AudioEngine {
         }
       });
 
+      window.addEventListener('native-playback-sync', (e) => {
+        const detail = e.detail || {};
+        if (this.activeSource === 'device') {
+          if (detail.action === 'play' || detail.action === 'playing') {
+            this.isPlaying = true;
+            this.notify('playStateChange', { isPlaying: true });
+            this.startNativeProgressTracker();
+          } else if (detail.action === 'pause') {
+            this.isPlaying = false;
+            this.notify('playStateChange', { isPlaying: false });
+            this.stopNativeProgressTracker();
+          } else if (detail.action === 'seeked' && typeof detail.position === 'number') {
+            this.currentTime = detail.position;
+            this.notify('timeUpdate', {
+              currentTime: this.currentTime,
+              duration: this.duration,
+              progress: this.duration > 0 ? this.currentTime / this.duration : 0
+            });
+          } else if (detail.action === 'trackChange') {
+            this.syncFromNativeService();
+          }
+        }
+      });
+
       window.addEventListener('beforeunload', () => this.savePlaybackSessionState());
       window.addEventListener('pagehide', () => this.savePlaybackSessionState());
+
+      // Reconnect to active native background session on startup/resume
+      setTimeout(() => this.reconnectNativeSession(), 200);
     }
+  }
+
+  reconnectNativeSession() {
+    if (typeof window === 'undefined' || !window.AndroidMusicBridge) return false;
+    try {
+      if (typeof window.AndroidMusicBridge.getNativePlaybackState === 'function') {
+        const raw = window.AndroidMusicBridge.getNativePlaybackState();
+        if (raw && raw !== '{}') {
+          const state = JSON.parse(raw);
+          if (state && state.activeSource === 'device' && state.currentTrack && state.currentTrack.id) {
+            this.activeSource = 'device';
+            this.currentMode = 'native';
+            if (Array.isArray(state.queue) && state.queue.length > 0) {
+              this.queue = state.queue;
+              this.queueIndex = typeof state.queueIndex === 'number' ? state.queueIndex : 0;
+              this.sourceStates.device.queue = [...this.queue];
+              this.sourceStates.device.originalQueue = [...this.queue];
+              this.sourceStates.device.queueIndex = this.queueIndex;
+            }
+            if (typeof state.isShuffle === 'boolean') {
+              this.isShuffle = state.isShuffle;
+              this.sourceStates.device.isShuffle = this.isShuffle;
+            }
+            if (state.repeatMode) {
+              this.repeatMode = state.repeatMode;
+              this.sourceStates.device.repeatMode = this.repeatMode;
+            }
+            this.currentTrack = state.currentTrack;
+            this.currentTime = state.currentTime || 0;
+            this.duration = state.duration || state.currentTrack.duration || 0;
+            this.isPlaying = !!state.isPlaying;
+
+            this.updateMediaSessionMetadata();
+            this.updateMediaSessionPlaybackState(this.isPlaying ? 'playing' : 'paused');
+
+            this.notify('trackChange', this.currentTrack);
+            this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+            this.notify('timeUpdate', {
+              currentTime: this.currentTime,
+              duration: this.duration,
+              progress: this.duration > 0 ? this.currentTime / this.duration : 0
+            });
+            this.notify('playStateChange', { isPlaying: this.isPlaying });
+
+            if (this.isPlaying) {
+              this.startNativeProgressTracker();
+            }
+            return true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Native session reconnection fallback:', e);
+    }
+    return false;
+  }
+
+  startNativeProgressTracker() {
+    this.stopNativeProgressTracker();
+    this.nativeProgressInterval = setInterval(() => {
+      if (this.activeSource !== 'device' || !this.isPlaying) return;
+      if (typeof window !== 'undefined' && window.AndroidMusicBridge?.getNativePlaybackState) {
+        try {
+          const raw = window.AndroidMusicBridge.getNativePlaybackState();
+          if (raw && raw !== '{}') {
+            const state = JSON.parse(raw);
+            if (typeof state.currentTime === 'number') {
+              this.currentTime = state.currentTime;
+              if (state.duration > 0) this.duration = state.duration;
+              const cur = this.currentTime;
+              const dur = this.duration || this.currentTrack?.duration || 0;
+              const prog = dur > 0 ? cur / dur : 0;
+              this.notify('timeUpdate', {
+                currentTime: cur,
+                duration: dur,
+                progress: prog
+              });
+              if ('mediaSession' in navigator && dur > 0) {
+                try {
+                  navigator.mediaSession.setPositionState({
+                    duration: dur,
+                    playbackRate: 1,
+                    position: cur
+                  });
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }, 250);
+  }
+
+  stopNativeProgressTracker() {
+    if (this.nativeProgressInterval) {
+      clearInterval(this.nativeProgressInterval);
+      this.nativeProgressInterval = null;
+    }
+  }
+
+  syncFromNativeService() {
+    if (typeof window === 'undefined' || !window.AndroidMusicBridge) return;
+    try {
+      if (typeof window.AndroidMusicBridge.getNativePlaybackState === 'function') {
+        const raw = window.AndroidMusicBridge.getNativePlaybackState();
+        if (raw && raw !== '{}') {
+          const state = JSON.parse(raw);
+          if (state && state.currentTrack && state.currentTrack.id) {
+            this.currentTrack = state.currentTrack;
+            if (typeof state.queueIndex === 'number') {
+              this.queueIndex = state.queueIndex;
+              this.sourceStates.device.queueIndex = state.queueIndex;
+            }
+            this.currentTime = state.currentTime || 0;
+            this.duration = state.duration || state.currentTrack.duration || 0;
+            this.isPlaying = !!state.isPlaying;
+            this.updateMediaSessionMetadata();
+            this.notify('trackChange', this.currentTrack);
+            this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+            this.notify('timeUpdate', {
+              currentTime: this.currentTime,
+              duration: this.duration,
+              progress: this.duration > 0 ? this.currentTime / this.duration : 0
+            });
+            this.notify('playStateChange', { isPlaying: this.isPlaying });
+          }
+        }
+      }
+    } catch (e) {}
   }
 
   notifyNativeBridge(isPlaying = this.isPlaying) {
     if (typeof window !== 'undefined' && window.AndroidMusicBridge) {
       try {
+        if (typeof window.AndroidMusicBridge.syncPlaybackSource === 'function') {
+          window.AndroidMusicBridge.syncPlaybackSource(this.activeSource);
+        }
         const title = this.currentTrack?.title || 'MUSE Track';
         const artist = this.currentTrack?.artist || 'Unknown Artist';
         const album = this.currentTrack?.album || 'MUSE';
@@ -124,17 +339,45 @@ export class AudioEngine {
     }
   }
 
+  snapshotCurrentSource() {
+    const curState = this.sourceStates[this.activeSource];
+    if (curState) {
+      curState.queue = [...this.queue];
+      curState.queueIndex = this.queueIndex;
+      curState.isShuffle = this.isShuffle;
+      curState.repeatMode = this.repeatMode;
+      curState.currentTrack = this.currentTrack;
+      curState.currentTime = this.currentTime;
+      curState.duration = this.duration;
+    }
+  }
+
   savePlaybackSessionState() {
     if (!this.currentTrack) return;
     try {
+      this.snapshotCurrentSource();
+
       Storage.setPlaybackSession({
+        activeSource: this.activeSource,
         currentTrack: this.currentTrack,
         currentTime: Math.floor(this.currentTime || 0),
         duration: Math.floor(this.duration || this.currentTrack.duration || 0),
-        queue: this.queue.slice(0, 50),
+        queue: this.queue.slice(0, 100),
         queueIndex: this.queueIndex,
         repeatMode: this.repeatMode,
         isShuffle: this.isShuffle,
+        sourceStates: {
+          youtube: {
+            ...this.sourceStates.youtube,
+            queue: (this.sourceStates.youtube.queue || []).slice(0, 50),
+            originalQueue: (this.sourceStates.youtube.originalQueue || []).slice(0, 50)
+          },
+          device: {
+            ...this.sourceStates.device,
+            queue: (this.sourceStates.device.queue || []).slice(0, 100),
+            originalQueue: (this.sourceStates.device.originalQueue || []).slice(0, 100)
+          }
+        },
         timestamp: Date.now()
       });
     } catch (e) {}
@@ -147,12 +390,33 @@ export class AudioEngine {
     }
 
     try {
+      if (session.sourceStates) {
+        if (session.sourceStates.youtube) {
+          this.sourceStates.youtube = {
+            ...this.sourceStates.youtube,
+            ...session.sourceStates.youtube
+          };
+        }
+        if (session.sourceStates.device) {
+          this.sourceStates.device = {
+            ...this.sourceStates.device,
+            ...session.sourceStates.device
+          };
+        }
+      }
+
+      this.activeSource = session.activeSource || (isDeviceTrack(session.currentTrack) ? 'device' : 'youtube');
+
       if (Array.isArray(session.queue) && session.queue.length > 0) {
         this.queue = [...session.queue];
         this.queueIndex = typeof session.queueIndex === 'number' && session.queueIndex >= 0 && session.queueIndex < this.queue.length
           ? session.queueIndex
           : 0;
+      } else if (this.sourceStates[this.activeSource]?.queue?.length > 0) {
+        this.queue = [...this.sourceStates[this.activeSource].queue];
+        this.queueIndex = this.sourceStates[this.activeSource].queueIndex || 0;
       }
+
       if (session.repeatMode) this.repeatMode = session.repeatMode;
       if (typeof session.isShuffle === 'boolean') this.isShuffle = session.isShuffle;
 
@@ -189,9 +453,10 @@ export class AudioEngine {
 
   initVisibilityListener() {
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
+      const handleVis = () => {
         this.savePlaybackSessionState();
         if (this.isPlaying && this.currentMode === 'yt' && this.ytPlayer) {
+          this.bgAudio.play().catch(() => {});
           try {
             if (typeof this.ytPlayer.getPlayerState === 'function') {
               const state = this.ytPlayer.getPlayerState();
@@ -201,7 +466,9 @@ export class AudioEngine {
             }
           } catch (e) {}
         }
-      });
+      };
+      document.addEventListener('visibilitychange', handleVis);
+      window.addEventListener('pagehide', handleVis);
     }
   }
 
@@ -316,6 +583,7 @@ export class AudioEngine {
     if (state === window.YT.PlayerState.PLAYING) {
       this.isPlaying = true;
       this.isLoadingTrack = false;
+      this.bgAudio.play().catch(() => {});
       this.startYouTubeProgressTracker();
       this.updateMediaSessionPlaybackState('playing');
       this.notifyNativeBridge(true);
@@ -325,6 +593,7 @@ export class AudioEngine {
     } else if (state === window.YT.PlayerState.PAUSED) {
       if (this.isPlaying && !this.userRequestedPause) {
         // Android background playback keep-alive: screen locked or app minimized
+        this.bgAudio.play().catch(() => {});
         setTimeout(() => {
           if (this.isPlaying && !this.userRequestedPause && this.ytPlayer && typeof this.ytPlayer.playVideo === 'function') {
             try { this.ytPlayer.playVideo(); } catch (e) {}
@@ -583,44 +852,113 @@ export class AudioEngine {
   playTrackAtIndex(index, autoPlay = true) {
     if (index < 0 || index >= this.queue.length) return;
     this.queueIndex = index;
-    this.loadTrack(this.queue[index], autoPlay);
+    const state = this.sourceStates[this.activeSource];
+    if (state) {
+      state.queueIndex = index;
+      if (this.isShuffle && state.shuffleOrder && state.shuffleOrder.length > 0) {
+        state.shuffleIndex = index;
+      }
+    }
+    this.loadTrack(this.queue[index], autoPlay, this.activeSource === 'youtube');
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
   }
 
   removeFromQueue(index) {
     if (index < 0 || index >= this.queue.length) return;
-    this.queue.splice(index, 1);
-    if (this.queueIndex >= this.queue.length) {
-      this.queueIndex = Math.max(0, this.queue.length - 1);
+    const removedTrack = this.queue.splice(index, 1)[0];
+    const state = this.sourceStates[this.activeSource];
+    if (state) {
+      state.queue = this.queue;
+      if (state.originalQueue) {
+        state.originalQueue = state.originalQueue.filter(t => t.id !== removedTrack.id);
+      }
+      if (state.shuffleOrder) {
+        state.shuffleOrder = state.shuffleOrder.filter(t => t.id !== removedTrack.id);
+      }
+      if (this.queueIndex >= this.queue.length) {
+        this.queueIndex = Math.max(0, this.queue.length - 1);
+      }
+      state.queueIndex = this.queueIndex;
+    } else {
+      if (this.queueIndex >= this.queue.length) {
+        this.queueIndex = Math.max(0, this.queue.length - 1);
+      }
     }
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
   }
 
   clearQueue() {
+    const state = this.sourceStates[this.activeSource];
     if (this.currentTrack) {
       this.queue = [this.currentTrack];
       this.queueIndex = 0;
+      if (state) {
+        state.queue = [this.currentTrack];
+        state.originalQueue = [this.currentTrack];
+        state.shuffleOrder = [this.currentTrack];
+        state.shuffleIndex = 0;
+        state.queueIndex = 0;
+      }
     } else {
       this.queue = [];
       this.queueIndex = 0;
+      if (state) {
+        state.queue = [];
+        state.originalQueue = [];
+        state.shuffleOrder = [];
+        state.shuffleIndex = 0;
+        state.queueIndex = 0;
+      }
     }
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
   }
 
-  setQueue(tracks, startIndex = 0, autoPlay = true) {
+  setQueue(tracks, startIndex = 0, autoPlay = true, explicitSource = null) {
     if (!tracks || tracks.length === 0) return;
-    this.queue = [...tracks];
-    this.queueIndex = Math.max(0, Math.min(startIndex, this.queue.length - 1));
-    this.loadTrack(this.queue[this.queueIndex], autoPlay);
+    const targetTrack = tracks[Math.max(0, Math.min(startIndex, tracks.length - 1))];
+    const source = explicitSource || (isDeviceTrack(targetTrack) ? 'device' : 'youtube');
+
+    if (source !== this.activeSource) {
+      this.snapshotCurrentSource();
+      this.activeSource = source;
+    }
+
+    const state = this.sourceStates[source];
+    state.originalQueue = [...tracks];
+    state.repeatMode = state.repeatMode || this.repeatMode;
+
+    if (state.isShuffle) {
+      const remaining = tracks.filter((_, idx) => idx !== startIndex);
+      const shuffled = shuffleArray(remaining);
+      state.shuffleOrder = [targetTrack, ...shuffled];
+      state.shuffleIndex = 0;
+      state.queue = [...state.shuffleOrder];
+      state.queueIndex = 0;
+    } else {
+      state.queue = [...tracks];
+      state.queueIndex = Math.max(0, Math.min(startIndex, tracks.length - 1));
+      state.shuffleOrder = [];
+      state.shuffleIndex = 0;
+    }
+
+    this.queue = state.queue;
+    this.queueIndex = state.queueIndex;
+    this.isShuffle = state.isShuffle;
+    this.repeatMode = state.repeatMode;
+
+    this.loadTrack(this.queue[this.queueIndex], autoPlay, source === 'youtube');
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
-    this.ensureQueueDepth();
+
+    if (source === 'youtube') {
+      this.ensureQueueDepth();
+    }
   }
 
   /**
-   * Generates a smart Up Next queue tailored to the selected track
-   * so every clicked song gets rich, multi-artist radio recommendations.
+   * Generates a smart Up Next queue tailored to the selected track (YouTube mode ONLY)
    */
   async populateSmartQueue(seedTrack) {
+    if (this.activeSource !== 'youtube') return;
     if (!seedTrack || !seedTrack.artist) return;
     try {
       const seenTitles = new Set([
@@ -643,6 +981,7 @@ export class AudioEngine {
 
       if (additions.length > 0 && this.currentTrack?.id === seedTrack.id) {
         this.queue.push(...additions);
+        this.sourceStates.youtube.originalQueue.push(...additions);
         this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
       }
     } catch (e) {
@@ -651,14 +990,13 @@ export class AudioEngine {
   }
 
   /**
-   * Endless Queue Auto-Refill (Spotify Style)
-   * As the listener approaches the end of the queue (or on the last song),
-   * automatically fetches non-repeating recommendations by varied related artists.
+   * Endless Queue Auto-Refill (YouTube mode ONLY)
    */
   async ensureQueueDepth(force = false) {
+    if (this.activeSource !== 'youtube') return;
     if (this.isReplenishingQueue) return;
     const remaining = this.queue.length - (this.queueIndex + 1);
-    if (!force && remaining >= 5) return; // Keep at least 5 upcoming tracks in queue
+    if (!force && remaining >= 5) return;
 
     const seedTrack = this.queue[this.queue.length - 1] || this.currentTrack;
     if (!seedTrack || !seedTrack.artist) return;
@@ -688,6 +1026,7 @@ export class AudioEngine {
 
       if (newAdditions.length > 0) {
         this.queue.push(...newAdditions);
+        this.sourceStates.youtube.originalQueue.push(...newAdditions);
         this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
       }
     } catch (e) {
@@ -699,7 +1038,7 @@ export class AudioEngine {
 
   updateMediaSessionMetadata() {
     if ('mediaSession' in navigator && this.currentTrack) {
-      let coverUrl = this.currentTrack.cover;
+      let coverUrl = getTrackArtworkUrl(this.currentTrack);
       if (!coverUrl || coverUrl.startsWith('data:image/svg')) {
         coverUrl = '/icons/logo.png';
       }
@@ -742,6 +1081,7 @@ export class AudioEngine {
   async loadTrack(track, autoPlay = true, buildSmartQueue = true) {
     if (!track) return;
     this.userRequestedPause = false;
+    track.cover = getTrackArtworkUrl(track);
     this.currentTrack = track;
     this.currentTime = 0;
     this.duration = track.duration || 0;
@@ -752,6 +1092,19 @@ export class AudioEngine {
       duration: this.duration,
       progress: 0
     });
+
+    const isDeviceTrack = checkIsDeviceTrack(track);
+    const targetSource = isDeviceTrack ? 'device' : 'youtube';
+
+    if (targetSource !== this.activeSource) {
+      this.snapshotCurrentSource();
+      this.activeSource = targetSource;
+      const state = this.sourceStates[targetSource];
+      this.queue = state.queue;
+      this.queueIndex = state.queueIndex;
+      this.isShuffle = state.isShuffle;
+      this.repeatMode = state.repeatMode;
+    }
 
     // Synchronize queue index with active track
     const existingIndex = this.queue.findIndex(t => t.id === track.id);
@@ -765,6 +1118,12 @@ export class AudioEngine {
         this.queue.splice(this.queueIndex + 1, 0, track);
         this.queueIndex++;
       }
+      if (this.sourceStates[this.activeSource]) {
+        this.sourceStates[this.activeSource].originalQueue = [...this.queue];
+      }
+    }
+    if (this.sourceStates[this.activeSource]) {
+      this.sourceStates[this.activeSource].queueIndex = this.queueIndex;
     }
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
 
@@ -778,26 +1137,115 @@ export class AudioEngine {
     // Track play history to prevent duplicate suggestions in auto-refill
     if (track && track.title) {
       const tUpper = (track.title || '').trim().toUpperCase();
-      if (!this.history.includes(tUpper)) {
-        this.history.push(tUpper);
-        if (this.history.length > 80) this.history.shift();
+      const hist = this.sourceStates[this.activeSource]?.history || this.history;
+      if (!hist.includes(tUpper)) {
+        hist.push(tUpper);
+        if (hist.length > 80) hist.shift();
       }
     }
 
+    // --- 1. DEVICE MODE PLAYBACK (Strict Isolation) ---
+    if (isDeviceTrack) {
+      this.stopYouTubeProgressTracker();
+      if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
+        try { this.ytPlayer.pauseVideo(); } catch (e) {}
+      }
+
+      // Check if Android Native Bridge is available for reliable ContentResolver playback
+      const hasNativeBridge = typeof window !== 'undefined' &&
+        window.AndroidMusicBridge &&
+        typeof window.AndroidMusicBridge.playDeviceTrackNative === 'function';
+
+      if (hasNativeBridge && (track.contentUri || track.filePath)) {
+        this.currentMode = 'native';
+        try {
+          this.audio.pause();
+        } catch (e) {}
+
+        const queueJson = JSON.stringify(this.queue);
+        const trackJson = JSON.stringify(track);
+
+        window.AndroidMusicBridge.playDeviceTrackNative(
+          trackJson,
+          queueJson,
+          this.queueIndex,
+          this.isShuffle,
+          this.repeatMode
+        );
+
+        this.isPlaying = autoPlay;
+        this.updateMediaSessionPlaybackState(autoPlay ? 'playing' : 'paused');
+        if (autoPlay) {
+          this.startNativeProgressTracker();
+        } else {
+          this.stopNativeProgressTracker();
+        }
+        this.notify('playStateChange', { isPlaying: autoPlay });
+        this.savePlaybackSessionState();
+        return;
+      }
+
+      // Web / Browser / Manual Blob Fallback
+      this.currentMode = 'html5';
+      this.stopNativeProgressTracker();
+
+      let audioSrc = null;
+      if (track.blob instanceof Blob) {
+        audioSrc = URL.createObjectURL(track.blob);
+      } else if (track.contentUri) {
+        if (typeof window !== 'undefined' && window.Capacitor && typeof window.Capacitor.convertFileSrc === 'function') {
+          audioSrc = window.Capacitor.convertFileSrc(track.contentUri);
+        } else {
+          audioSrc = track.contentUri;
+        }
+      } else {
+        const audioBlob = await Storage.getOfflineAudioBlob(track.id);
+        if (audioBlob instanceof Blob) {
+          audioSrc = URL.createObjectURL(audioBlob);
+        }
+      }
+
+      if (!audioSrc) {
+        console.warn('Device audio track is unavailable:', track.title);
+        this.isLoadingTrack = false;
+        this.notify('loadingChange', { isLoading: false, track });
+        window.dispatchEvent(new CustomEvent('melo-toast', {
+          detail: {
+            message: `Unavailable: ${track.title}`,
+            isSuccess: false
+          }
+        }));
+        return;
+      }
+
+      try {
+        this.audio.src = audioSrc;
+        this.audio.loop = false;
+        this.audio.load();
+        if (autoPlay) {
+          this.play();
+        }
+        this.savePlaybackSessionState();
+        this.notifyNativeBridge(autoPlay);
+      } catch (err) {
+        console.error('Error loading device track into HTML5 Audio:', err);
+      }
+      return;
+    }
+
+    // --- 2. YOUTUBE MODE PLAYBACK ---
     if (buildSmartQueue) {
       this.populateSmartQueue(track);
     } else {
       this.ensureQueueDepth();
     }
 
-    // 1. Check offline cached audio blob or device music file
-    const isDeviceTrack = track.isDeviceMusic || track.source === 'device' || track.blob instanceof Blob;
+    // Check offline cached audio blob for YouTube track
     let audioBlob = track.blob;
-    if (!audioBlob && (!navigator.onLine || isDeviceTrack)) {
+    if (!audioBlob && !navigator.onLine) {
       audioBlob = await Storage.getOfflineAudioBlob(track.id);
     }
 
-    // Only play cached audio blob if offline OR if it is a local device file.
     if (audioBlob && (!navigator.onLine || isDeviceTrack)) {
       this.currentMode = 'html5';
       this.stopYouTubeProgressTracker();
@@ -814,7 +1262,7 @@ export class AudioEngine {
       return;
     }
 
-    // 2. Offline check: if offline and no cached audio blob, notify user
+    // Offline check: if offline and no cached audio blob, notify user
     if (!navigator.onLine) {
       this.isLoadingTrack = false;
       this.notify('loadingChange', { isLoading: false, track });
@@ -827,7 +1275,7 @@ export class AudioEngine {
       return;
     }
 
-    // 3. Online Track: Stream full master track ad-free from YouTube (full length, not 30-sec preview!)
+    // Online Track: Stream full master track ad-free from YouTube (full length, not 30-sec preview!)
     this.isLoadingTrack = true;
     this.notify('loadingChange', { isLoading: true, track });
 
@@ -860,6 +1308,7 @@ export class AudioEngine {
 
         if (autoPlay) {
           this.isPlaying = true;
+          this.bgAudio.play().catch(() => {});
           this.startYouTubeProgressTracker();
           this.updateMediaSessionPlaybackState('playing');
         } else {
@@ -876,7 +1325,29 @@ export class AudioEngine {
 
     // Only fallback to audioUrl if YouTube was completely unavailable or failed
     if (!playedViaYouTube) {
-      if (track.audioUrl) {
+      if (youtubeId && navigator.onLine) {
+        // Retry once YouTube player finishes initialization instead of dropping to 30s preview
+        this.initYouTubePlayer().then((player) => {
+          if (player && typeof player.loadVideoById === 'function' && this.currentTrack?.id === track.id) {
+            this.currentMode = 'yt';
+            this.audio.pause();
+            const startSec = this.pendingResumeTime || 0;
+            this.pendingResumeTime = 0;
+            player.loadVideoById({
+              videoId: youtubeId,
+              startSeconds: startSec
+            });
+            if (autoPlay) {
+              this.isPlaying = true;
+              this.bgAudio.play().catch(() => {});
+              this.startYouTubeProgressTracker();
+              this.updateMediaSessionPlaybackState('playing');
+            }
+            this.isLoadingTrack = false;
+            this.notify('loadingChange', { isLoading: false, track });
+          }
+        }).catch(() => {});
+      } else if (track.audioUrl) {
         this.currentMode = 'html5';
         this.stopYouTubeProgressTracker();
         if (this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
@@ -891,6 +1362,8 @@ export class AudioEngine {
           this.audio.currentTime = startSec;
         }
         if (autoPlay) this.play();
+        this.isLoadingTrack = false;
+        this.notify('loadingChange', { isLoading: false, track });
       } else {
         window.dispatchEvent(new CustomEvent('melo-toast', {
           detail: {
@@ -898,9 +1371,9 @@ export class AudioEngine {
             isSuccess: false
           }
         }));
+        this.isLoadingTrack = false;
+        this.notify('loadingChange', { isLoading: false, track });
       }
-      this.isLoadingTrack = false;
-      this.notify('loadingChange', { isLoading: false, track });
     }
 
     // Add to history
@@ -920,6 +1393,18 @@ export class AudioEngine {
     if (!this.currentTrack && this.queue.length > 0) {
       this.loadTrack(this.queue[this.queueIndex], true);
       return;
+    }
+
+    if (this.activeSource === 'device') {
+      if (this.currentMode === 'native' && typeof window !== 'undefined' && window.AndroidMusicBridge && typeof window.AndroidMusicBridge.resumeDeviceAudio === 'function') {
+        window.AndroidMusicBridge.resumeDeviceAudio();
+        this.isPlaying = true;
+        this.startNativeProgressTracker();
+        this.updateMediaSessionPlaybackState('playing');
+        this.notify('playStateChange', { isPlaying: true });
+        this.savePlaybackSessionState();
+        return;
+      }
     }
 
     const resumeTime = this.pendingResumeTime;
@@ -965,6 +1450,18 @@ export class AudioEngine {
     this.notifyNativeBridge(false);
     this.savePlaybackSessionState();
     try { this.bgAudio.pause(); } catch (e) {}
+
+    if (this.activeSource === 'device') {
+      if (this.currentMode === 'native' && typeof window !== 'undefined' && window.AndroidMusicBridge && typeof window.AndroidMusicBridge.pauseDeviceAudio === 'function') {
+        window.AndroidMusicBridge.pauseDeviceAudio();
+        this.isPlaying = false;
+        this.stopNativeProgressTracker();
+        this.updateMediaSessionPlaybackState('paused');
+        this.notify('playStateChange', { isPlaying: false });
+        return;
+      }
+    }
+
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.pauseVideo === 'function') {
       this.ytPlayer.pauseVideo();
       this.isPlaying = false;
@@ -994,6 +1491,18 @@ export class AudioEngine {
     const clamped = Math.max(0, Math.min(seconds, this.duration || 9999));
     this.currentTime = clamped;
 
+    if (this.activeSource === 'device') {
+      if (this.currentMode === 'native' && typeof window !== 'undefined' && window.AndroidMusicBridge && typeof window.AndroidMusicBridge.seekDeviceAudio === 'function') {
+        window.AndroidMusicBridge.seekDeviceAudio(clamped);
+        this.notify('timeUpdate', {
+          currentTime: clamped,
+          duration: this.duration,
+          progress: this.duration > 0 ? clamped / this.duration : 0
+        });
+        return;
+      }
+    }
+
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.seekTo === 'function') {
       this.ytPlayer.seekTo(clamped, true);
       this.notifyNativeBridge(this.isPlaying);
@@ -1019,31 +1528,88 @@ export class AudioEngine {
       return;
     }
 
+    const state = this.sourceStates[this.activeSource];
+
     if (this.isShuffle) {
-      this.queueIndex = Math.floor(Math.random() * this.queue.length);
-      this.loadTrack(this.queue[this.queueIndex], true, false);
-      this.ensureQueueDepth();
+      let shuffleOrder = (state && state.shuffleOrder && state.shuffleOrder.length > 0)
+        ? state.shuffleOrder
+        : [...this.queue];
+
+      if (state) state.shuffleOrder = shuffleOrder;
+      let shuffleIndex = (state && typeof state.shuffleIndex === 'number') ? state.shuffleIndex : 0;
+
+      if (shuffleIndex < shuffleOrder.length - 1) {
+        shuffleIndex++;
+        if (state) state.shuffleIndex = shuffleIndex;
+        const nextTrack = shuffleOrder[shuffleIndex];
+        this.queueIndex = this.queue.findIndex(t => t.id === nextTrack.id);
+        if (this.queueIndex === -1) this.queueIndex = 0;
+        if (state) state.queueIndex = this.queueIndex;
+        this.loadTrack(nextTrack, true, false);
+      } else {
+        // End of current shuffle cycle! Every eligible track has played once.
+        if (this.repeatMode === 'off') {
+          this.pause();
+          this.seek(0);
+          return;
+        } else if (this.repeatMode === 'all') {
+          // Start a new shuffle cycle avoiding repeating the last track immediately
+          const lastTrack = shuffleOrder[shuffleOrder.length - 1];
+          const pool = (state && state.originalQueue && state.originalQueue.length > 0)
+            ? [...state.originalQueue]
+            : [...this.queue];
+          let newShuffled = shuffleArray(pool);
+
+          if (newShuffled.length > 1 && lastTrack && newShuffled[0].id === lastTrack.id) {
+            const swapIdx = 1 + Math.floor(Math.random() * (newShuffled.length - 1));
+            [newShuffled[0], newShuffled[swapIdx]] = [newShuffled[swapIdx], newShuffled[0]];
+          }
+
+          if (state) {
+            state.shuffleOrder = newShuffled;
+            state.shuffleIndex = 0;
+            state.queue = newShuffled;
+            state.queueIndex = 0;
+          }
+          this.queue = newShuffled;
+          this.queueIndex = 0;
+          this.loadTrack(newShuffled[0], true, false);
+        }
+      }
+
+      this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+      if (this.activeSource === 'youtube') {
+        this.ensureQueueDepth();
+      }
       return;
     }
 
-    // Approaching or at the end of the queue: force endless replenishment
-    if (this.queueIndex >= this.queue.length - 1) {
+    // --- SEQUENTIAL PLAYBACK (Shuffle OFF) ---
+    if (this.activeSource === 'youtube' && this.queueIndex >= this.queue.length - 1) {
       await this.ensureQueueDepth(true);
     }
 
     if (this.queueIndex < this.queue.length - 1) {
       this.queueIndex++;
+      if (state) state.queueIndex = this.queueIndex;
       this.loadTrack(this.queue[this.queueIndex], true, false);
     } else {
-      // Offline fallback: loop if repeatMode is all
+      // Reached the end of queue
       if (this.repeatMode === 'all') {
         this.queueIndex = 0;
-        this.loadTrack(this.queue[this.queueIndex], true, false);
+        if (state) state.queueIndex = 0;
+        this.loadTrack(this.queue[0], true, false);
+      } else {
+        // Repeat OFF -> stop playback at the end
+        this.pause();
+        this.seek(0);
       }
     }
 
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
-    this.ensureQueueDepth();
+    if (this.activeSource === 'youtube') {
+      this.ensureQueueDepth();
+    }
   }
 
   prev() {
@@ -1054,12 +1620,53 @@ export class AudioEngine {
       return;
     }
 
+    const state = this.sourceStates[this.activeSource];
+
+    if (this.isShuffle) {
+      let shuffleOrder = (state && state.shuffleOrder && state.shuffleOrder.length > 0)
+        ? state.shuffleOrder
+        : [...this.queue];
+      let shuffleIndex = (state && typeof state.shuffleIndex === 'number') ? state.shuffleIndex : 0;
+
+      if (shuffleIndex > 0) {
+        shuffleIndex--;
+        if (state) state.shuffleIndex = shuffleIndex;
+        const prevTrack = shuffleOrder[shuffleIndex];
+        this.queueIndex = this.queue.findIndex(t => t.id === prevTrack.id);
+        if (this.queueIndex === -1) this.queueIndex = 0;
+        if (state) state.queueIndex = this.queueIndex;
+        this.loadTrack(prevTrack, true, false);
+      } else {
+        if (this.repeatMode === 'all') {
+          shuffleIndex = Math.max(0, shuffleOrder.length - 1);
+          if (state) state.shuffleIndex = shuffleIndex;
+          const prevTrack = shuffleOrder[shuffleIndex];
+          this.queueIndex = this.queue.findIndex(t => t.id === prevTrack.id);
+          if (this.queueIndex === -1) this.queueIndex = 0;
+          if (state) state.queueIndex = this.queueIndex;
+          this.loadTrack(prevTrack, true, false);
+        } else {
+          this.seek(0);
+        }
+      }
+
+      this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
+      return;
+    }
+
+    // Sequential prev
     if (this.queueIndex > 0) {
       this.queueIndex--;
     } else {
-      this.queueIndex = this.queue.length - 1;
+      if (this.repeatMode === 'all') {
+        this.queueIndex = this.queue.length - 1;
+      } else {
+        this.seek(0);
+        return;
+      }
     }
 
+    if (state) state.queueIndex = this.queueIndex;
     this.loadTrack(this.queue[this.queueIndex], true, false);
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
   }
@@ -1069,7 +1676,6 @@ export class AudioEngine {
       this.seek(0);
       this.play();
     } else {
-      // Move to next track and auto-refill queue with fresh recommendations
       this.next();
     }
   }
@@ -1078,11 +1684,80 @@ export class AudioEngine {
     const modes = ['off', 'all', 'one'];
     const nextIdx = (modes.indexOf(this.repeatMode) + 1) % modes.length;
     this.repeatMode = modes[nextIdx];
+    if (this.sourceStates[this.activeSource]) {
+      this.sourceStates[this.activeSource].repeatMode = this.repeatMode;
+    }
     return this.repeatMode;
   }
 
   toggleShuffle() {
     this.isShuffle = !this.isShuffle;
+    const state = this.sourceStates[this.activeSource];
+    if (state) {
+      state.isShuffle = this.isShuffle;
+    }
+
+    if (this.isShuffle) {
+      // Enabling shuffle during playback:
+      // Keep the current song playing and shuffle the remaining eligible tracks
+      const current = this.currentTrack || this.queue[this.queueIndex];
+      const orig = (state && state.originalQueue && state.originalQueue.length > 0)
+        ? state.originalQueue
+        : [...this.queue];
+
+      if (state) state.originalQueue = [...orig];
+
+      if (current) {
+        const remaining = orig.filter(t => t.id !== current.id);
+        const shuffled = shuffleArray(remaining);
+        const shuffledOrder = [current, ...shuffled];
+        if (state) {
+          state.shuffleOrder = shuffledOrder;
+          state.shuffleIndex = 0;
+          state.queue = [...shuffledOrder];
+          state.queueIndex = 0;
+        }
+        this.queue = [...shuffledOrder];
+        this.queueIndex = 0;
+      } else {
+        const shuffledOrder = shuffleArray([...orig]);
+        if (state) {
+          state.shuffleOrder = shuffledOrder;
+          state.shuffleIndex = 0;
+          state.queue = [...shuffledOrder];
+          state.queueIndex = 0;
+        }
+        this.queue = [...shuffledOrder];
+        this.queueIndex = 0;
+      }
+    } else {
+      // Disabling shuffle:
+      // Restore sequential playback from current track's position in original queue
+      const current = this.currentTrack || this.queue[this.queueIndex];
+      const orig = (state && state.originalQueue && state.originalQueue.length > 0)
+        ? state.originalQueue
+        : [...this.queue];
+
+      this.queue = [...orig];
+      if (state) {
+        state.queue = this.queue;
+      }
+
+      if (current) {
+        const origIdx = orig.findIndex(t => t.id === current.id);
+        this.queueIndex = origIdx !== -1 ? origIdx : 0;
+      } else {
+        this.queueIndex = 0;
+      }
+
+      if (state) {
+        state.queueIndex = this.queueIndex;
+        state.shuffleOrder = [];
+        state.shuffleIndex = 0;
+      }
+    }
+
+    this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
     return this.isShuffle;
   }
 
@@ -1092,6 +1767,17 @@ export class AudioEngine {
       this.queue.splice(this.queueIndex + 1, 0, track);
     } else {
       this.queue.push(track);
+    }
+    const state = this.sourceStates[this.activeSource];
+    if (state) {
+      state.queue = [...this.queue];
+      if (state.originalQueue) {
+        if (playNext) {
+          state.originalQueue.splice(this.queueIndex + 1, 0, track);
+        } else {
+          state.originalQueue.push(track);
+        }
+      }
     }
     this.notify('queueChange', { queue: this.queue, index: this.queueIndex });
   }

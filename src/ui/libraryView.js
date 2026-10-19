@@ -2,6 +2,7 @@
 import { Icons } from './icons.js';
 import { Storage } from '../services/storage.js';
 import { DEFAULT_FALLBACK_COVER, SAMPLE_TRACKS } from '../data/samples.js';
+import { getTrackArtworkUrl } from '../services/artworkService.js';
 
 export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpenPlaylist }) {
   let activeTab = 'liked'; // 'liked' | 'playlists' | 'device'
@@ -49,7 +50,8 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
     }
   };
 
-  // Load device tracks from IndexedDB
+  // Load device tracks from Storage
+  deviceTracksCache = Storage.getDeviceTracksSync();
   Storage.getDeviceTracks().then(tracks => {
     deviceTracksCache = tracks || [];
     if (activeTab === 'device') {
@@ -152,6 +154,26 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
             </form>
           </div>
         </div>
+
+        <!-- Permission Confirmation Sheet Modal for Device Music Scan -->
+        <div class="playlist-popup-backdrop" id="device-scan-permission-popup">
+          <div class="playlist-popup-card">
+            <div class="playlist-popup-header">
+              <div class="playlist-popup-icon-badge">
+                ${Icons.folderMusic(26)}
+              </div>
+              <button class="btn-circle-nav" id="btn-close-device-perm-modal" title="Close" type="button">
+                ${Icons.close(18)}
+              </button>
+            </div>
+            <h3 class="playlist-popup-title">Scan Device Music</h3>
+            <p class="playlist-popup-sub">MUSE will search your phone's storage for audio files (MP3, M4A, FLAC, WAV, AAC) using Android MediaStore to build your offline Device Music Library. Would you like to grant permission and scan now?</p>
+            <div class="playlist-popup-actions" style="margin-top: 16px;">
+              <button type="button" class="btn-secondary-pill" id="btn-cancel-device-perm">Cancel</button>
+              <button type="button" class="btn-black-pill" id="btn-confirm-device-perm" style="flex: 1;">Grant & Scan</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -182,7 +204,7 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
             return `
               <div class="track-row-item ${audioEngine?.currentTrack?.id === t.id ? 'playing' : ''}" data-id="${t.id}">
                 <div class="track-row-left">
-                  <img class="track-row-thumb" src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" />
+                  <img class="track-row-thumb" src="${getTrackArtworkUrl(t)}" alt="${t.title}" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
                   <div class="track-row-info">
                     <span class="track-row-title">${t.title}</span>
                     <span class="track-row-artist">
@@ -236,7 +258,7 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
               <div class="playlist-list-card" data-playlist-id="${pl.id}">
                 <div class="playlist-card-thumb-wrap">
                   ${(pl.tracks && pl.tracks.length > 0 && pl.tracks[0].cover) ? `
-                    <img src="${pl.tracks[0].cover}" alt="${pl.title}" class="playlist-card-thumb" />
+                    <img src="${getTrackArtworkUrl(pl.tracks[0])}" alt="${pl.title}" class="playlist-card-thumb" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
                   ` : `
                     <div class="playlist-card-folder-icon">
                       ${Icons.folderMusic(24)}
@@ -285,15 +307,15 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
             </div>
           ` : ''}
 
-          <!-- Device Scanner Actions: Folder Permission Picker & File Multi-select -->
+          <!-- Device Scanner Actions: MediaStore Scan & Manual File Picker -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div class="playlist-create-tile" id="btn-scan-music-folder" style="cursor: pointer; padding: 14px; flex-direction: column; align-items: flex-start; gap: 8px;">
               <div class="btn-circle-nav" style="width: 40px; height: 40px; background: var(--accent-black); color: #FFF;">
                 ${Icons.download(18)}
               </div>
               <div>
-                <span style="font-weight: 800; font-size: 13.5px; color: var(--text-primary); display: block;">Scan Folder</span>
-                <p style="font-size: 10.5px; color: var(--text-secondary); margin-top: 2px;">Grant folder access</p>
+                <span style="font-weight: 800; font-size: 13.5px; color: var(--text-primary); display: block;">Scan Device</span>
+                <p style="font-size: 10.5px; color: var(--text-secondary); margin-top: 2px;">MediaStore auto-scan</p>
               </div>
             </div>
 
@@ -303,8 +325,8 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
                 ${Icons.plus(18)}
               </div>
               <div>
-                <span style="font-weight: 800; font-size: 13.5px; color: var(--text-primary); display: block;">Pick Audio</span>
-                <p style="font-size: 10.5px; color: var(--text-secondary); margin-top: 2px;">Select individual files</p>
+                <span style="font-weight: 800; font-size: 13.5px; color: var(--text-primary); display: block;">Import Files</span>
+                <p style="font-size: 10.5px; color: var(--text-secondary); margin-top: 2px;">Manual audio picker</p>
               </div>
             </label>
           </div>
@@ -313,14 +335,14 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
             <div style="text-align: center; padding: 36px 20px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 8px;">
               ${Icons.music(36)}
               <p style="font-weight: 700; font-size: 14px; color: var(--text-primary);">No local device tracks loaded</p>
-              <span style="font-size: 12px; max-width: 250px;">Scan your phone's Music directory or select audio files to play them with zero internet.</span>
+              <span style="font-size: 12px; max-width: 250px;">Scan phone storage with MediaStore or select audio files to play them offline with zero internet.</span>
             </div>
           ` : `
             <div class="vertical-track-list">
               ${filtered.map(t => `
                 <div class="track-row-item device-track-row" data-id="${t.id}">
                   <div class="track-row-left">
-                    <img class="track-row-thumb" src="${t.cover || DEFAULT_FALLBACK_COVER}" alt="${t.title}" />
+                    <img class="track-row-thumb" src="${getTrackArtworkUrl(t)}" alt="${t.title}" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
                     <div class="track-row-info">
                       <span class="track-row-title">${t.title}</span>
                       <span class="track-row-artist">${t.artist} • Local Device File</span>
@@ -328,6 +350,9 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
                   </div>
                   <div class="track-row-right">
                     <span class="track-duration-pill">${formatTime(t.duration)}</span>
+                    <button class="btn-circle-nav btn-delete-device-track" data-id="${t.id}" title="Remove track" style="width: 32px; height: 32px; opacity: 0.7;">
+                      ${Icons.trash(14)}
+                    </button>
                   </div>
                 </div>
               `).join('')}
@@ -389,6 +414,120 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
       switchTab('device');
     };
 
+    // Permission Modal controls
+    const openDevicePermModal = () => {
+      const popup = container.querySelector('#device-scan-permission-popup');
+      if (popup) {
+        popup.classList.add('open');
+        document.body.classList.add('sheet-modal-open');
+        document.querySelector('.device-frame')?.classList.add('sheet-modal-open');
+      }
+    };
+
+    const closeDevicePermModal = () => {
+      const popup = container.querySelector('#device-scan-permission-popup');
+      if (popup) {
+        popup.classList.remove('open');
+        document.body.classList.remove('sheet-modal-open');
+        document.querySelector('.device-frame')?.classList.remove('sheet-modal-open');
+      }
+    };
+
+    container.querySelector('#btn-close-device-perm-modal')?.addEventListener('click', closeDevicePermModal);
+    container.querySelector('#btn-cancel-device-perm')?.addEventListener('click', closeDevicePermModal);
+    container.querySelector('#device-scan-permission-popup')?.addEventListener('click', (e) => {
+      if (e.target === container.querySelector('#device-scan-permission-popup')) {
+        closeDevicePermModal();
+      }
+    });
+
+    container.querySelector('#btn-confirm-device-perm')?.addEventListener('click', () => {
+      closeDevicePermModal();
+      performDeviceMusicScan();
+    });
+
+    const executeMediaStoreScan = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.AndroidMusicBridge && typeof window.AndroidMusicBridge.queryDeviceAudio === 'function') {
+          const jsonStr = window.AndroidMusicBridge.queryDeviceAudio();
+          const parsed = JSON.parse(jsonStr || '[]');
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            deviceTracksCache = await Storage.mergeMediaStoreTracks(parsed);
+            window.dispatchEvent(new CustomEvent('melo-toast', {
+              detail: {
+                message: `Found ${parsed.length} device tracks`,
+                isSuccess: true
+              }
+            }));
+          } else {
+            window.dispatchEvent(new CustomEvent('melo-toast', {
+              detail: {
+                message: 'No music files found in phone storage',
+                isSuccess: false
+              }
+            }));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to query MediaStore:', e);
+      } finally {
+        isScanningDevice = false;
+        switchTab('device');
+      }
+    };
+
+    const performDeviceMusicScan = async () => {
+      isScanningDevice = true;
+      const body = container.querySelector('#lib-content-body');
+      if (body) body.innerHTML = renderTabContent();
+
+      if (typeof window !== 'undefined' && window.AndroidMusicBridge) {
+        try {
+          const hasPerm = typeof window.AndroidMusicBridge.hasStoragePermission === 'function'
+            ? window.AndroidMusicBridge.hasStoragePermission()
+            : false;
+
+          if (!hasPerm && typeof window.AndroidMusicBridge.requestStoragePermission === 'function') {
+            const onPermResult = async (e) => {
+              window.removeEventListener('device-permission-result', onPermResult);
+              if (e.detail?.granted) {
+                await executeMediaStoreScan();
+              } else {
+                isScanningDevice = false;
+                switchTab('device');
+                if (e.detail?.permanentlyDenied) {
+                  window.dispatchEvent(new CustomEvent('melo-toast', {
+                    detail: {
+                      message: 'Storage permission denied. Open App Settings to allow.',
+                      isSuccess: false
+                    }
+                  }));
+                } else {
+                  window.dispatchEvent(new CustomEvent('melo-toast', {
+                    detail: {
+                      message: 'Storage permission is required to scan device music',
+                      isSuccess: false
+                    }
+                  }));
+                }
+              }
+            };
+            window.addEventListener('device-permission-result', onPermResult);
+            window.AndroidMusicBridge.requestStoragePermission();
+            return;
+          }
+
+          await executeMediaStoreScan();
+          return;
+        } catch (err) {
+          console.warn('Android native scan error:', err);
+        }
+      }
+
+      // Web/Desktop fallback
+      await scanMusicFolder();
+    };
+
     // Scan Music Folder using File System Access API
     const scanMusicFolder = async () => {
       if ('showDirectoryPicker' in window) {
@@ -445,7 +584,7 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
       container.querySelector('#device-audio-input-inner')?.click();
     };
 
-    container.querySelector('#btn-scan-music-folder')?.addEventListener('click', scanMusicFolder);
+    container.querySelector('#btn-scan-music-folder')?.addEventListener('click', openDevicePermModal);
 
     container.querySelector('#device-audio-input')?.addEventListener('change', (e) => {
       if (e.target.files) handleFiles(Array.from(e.target.files));
@@ -570,12 +709,33 @@ export function renderLibraryView(container, { audioEngine, onSelectTrack, onOpe
       });
     });
 
-    // Device Track clicks (plays local file blob)
+    // Device Track clicks (plays local file and establishes device queue)
     container.querySelectorAll('.device-track-row').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-device-track')) return;
         const trackId = row.dataset.id;
-        const track = deviceTracksCache.find(t => t.id === trackId);
-        if (track) onSelectTrack(track);
+        const trackIndex = deviceTracksCache.findIndex(t => t.id === trackId);
+        if (trackIndex !== -1) {
+          audioEngine.setQueue(deviceTracksCache, trackIndex, true, 'device');
+          if (onSelectTrack) onSelectTrack(deviceTracksCache[trackIndex]);
+        }
+      });
+    });
+
+    // Delete Device Track
+    container.querySelectorAll('.btn-delete-device-track').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const trackId = btn.dataset.id;
+        if (confirm('Remove this track from your Device Music library?')) {
+          await Storage.removeDeviceTrack(trackId);
+          deviceTracksCache = await Storage.getDeviceTracks();
+          const body = container.querySelector('#lib-content-body');
+          if (body) {
+            body.innerHTML = renderTabContent();
+            attachContentEvents();
+          }
+        }
       });
     });
 

@@ -3,6 +3,7 @@ import './style.css';
 import { Icons } from './ui/icons.js';
 import { audioEngine } from './services/audioEngine.js';
 import { SAMPLE_TRACKS, DEFAULT_FALLBACK_COVER } from './data/samples.js';
+import { getTrackArtworkUrl } from './services/artworkService.js';
 
 // Views
 import { renderOnboardingView } from './ui/onboardingView.js';
@@ -65,7 +66,7 @@ class App {
         <!-- Mini-Player Bar (docked above navigation) -->
         <div class="mini-player-bar hidden" id="mini-player-bar">
           <div class="mini-left">
-            <img class="mini-thumb" id="mini-thumb" src="${DEFAULT_FALLBACK_COVER}" alt="Track artwork" />
+            <img class="mini-thumb" id="mini-thumb" src="${DEFAULT_FALLBACK_COVER}" alt="Track artwork" onerror="this.onerror=null;this.src='${DEFAULT_FALLBACK_COVER}'" />
             <div class="mini-info">
               <span class="mini-title" id="mini-title">CALLING MY PHONE</span>
               <span class="mini-artist" id="mini-artist">Lil Tjay feat. 6LACK</span>
@@ -473,7 +474,8 @@ class App {
     const miniArtist = document.querySelector('#mini-artist');
 
     audioEngine.subscribe('trackChange', (track) => {
-      miniThumb.src = track.cover || DEFAULT_FALLBACK_COVER;
+      miniThumb.src = DEFAULT_FALLBACK_COVER;
+      miniThumb.src = getTrackArtworkUrl(track);
       miniTitle.textContent = track.title;
       miniArtist.textContent = track.artist;
     });
