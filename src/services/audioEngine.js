@@ -74,10 +74,16 @@ export class AudioEngine {
         const action = e.detail?.action;
         if (action === 'toggle') {
           this.togglePlay();
+        } else if (action === 'play') {
+          this.play();
+        } else if (action === 'pause') {
+          this.pause();
         } else if (action === 'next') {
           this.next();
         } else if (action === 'previous') {
           this.prev();
+        } else if (action === 'seek' && typeof e.detail?.position === 'number') {
+          this.seek(e.detail.position);
         }
       });
 
@@ -89,11 +95,29 @@ export class AudioEngine {
   notifyNativeBridge(isPlaying = this.isPlaying) {
     if (typeof window !== 'undefined' && window.AndroidMusicBridge) {
       try {
-        window.AndroidMusicBridge.playTrack(
-          this.currentTrack?.title || 'MUSE Music',
-          this.currentTrack?.artist || 'Unknown Artist',
-          isPlaying
-        );
+        const title = this.currentTrack?.title || 'MUSE Track';
+        const artist = this.currentTrack?.artist || 'Unknown Artist';
+        const album = this.currentTrack?.album || 'MUSE';
+        let cover = this.currentTrack?.cover || '';
+        if (typeof cover === 'string' && (cover.startsWith('data:image/svg') || cover.startsWith('blob:'))) {
+          cover = '';
+        }
+        const durationSec = (this.duration && this.duration > 0) ? this.duration : (this.currentTrack?.duration || 0);
+        const currentSec = this.currentTime || 0;
+
+        if (typeof window.AndroidMusicBridge.updateState === 'function') {
+          window.AndroidMusicBridge.updateState(
+            title,
+            artist,
+            album,
+            cover,
+            durationSec,
+            currentSec,
+            isPlaying
+          );
+        } else if (typeof window.AndroidMusicBridge.playTrack === 'function') {
+          window.AndroidMusicBridge.playTrack(title, artist, isPlaying);
+        }
       } catch (e) {
         console.warn('Native bridge notify note:', e);
       }
@@ -347,8 +371,12 @@ export class AudioEngine {
         }
       }
 
+      const durLearned = (this.duration <= 0 && dur > 0);
       this.currentTime = time;
       if (dur > 0) this.duration = dur;
+      if (durLearned) {
+        this.notifyNativeBridge(this.isPlaying);
+      }
 
       if (Date.now() - this.lastSessionSave > 1500) {
         this.lastSessionSave = Date.now();
@@ -968,10 +996,12 @@ export class AudioEngine {
 
     if (this.currentMode === 'yt' && this.ytPlayer && typeof this.ytPlayer.seekTo === 'function') {
       this.ytPlayer.seekTo(clamped, true);
+      this.notifyNativeBridge(this.isPlaying);
       return;
     }
 
     this.audio.currentTime = clamped;
+    this.notifyNativeBridge(this.isPlaying);
   }
 
   seekRatio(ratio) {

@@ -129,14 +129,18 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
 
   // Setup circle dash array for progress stroke
   if (progressFill) {
-    progressFill.style.strokeDasharray = `${circumference}`;
-    progressFill.style.strokeDashoffset = `${circumference}`;
+    progressFill.setAttribute('stroke-dasharray', `${circumference.toFixed(1)}`);
+    progressFill.setAttribute('stroke-dashoffset', `${circumference.toFixed(1)}`);
+    progressFill.style.strokeDasharray = `${circumference.toFixed(1)}px`;
+    progressFill.style.strokeDashoffset = `${circumference.toFixed(1)}px`;
   }
 
   // Updates Scrubber position around circular orbit
   function updateCircleScrubber(progress) {
     if (!orbitDot || !progressFill) return;
-    const safeProg = isNaN(progress) ? 0 : Math.max(0, Math.min(progress, 1));
+    const safeProg = (typeof progress === 'number' && !isNaN(progress) && isFinite(progress))
+      ? Math.max(0, Math.min(progress, 1))
+      : 0;
     currentProgressRatio = safeProg;
 
     const angle = safeProg * 2 * Math.PI - Math.PI / 2;
@@ -146,8 +150,9 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
     orbitDot.setAttribute('cx', x.toFixed(2));
     orbitDot.setAttribute('cy', y.toFixed(2));
 
-    const offset = circumference * (1 - safeProg);
-    progressFill.style.strokeDashoffset = offset.toFixed(1);
+    const offset = Math.max(0, Math.min(circumference, circumference * (1 - safeProg)));
+    progressFill.setAttribute('stroke-dashoffset', offset.toFixed(1));
+    progressFill.style.strokeDashoffset = `${offset.toFixed(1)}px`;
   }
 
   // Initialize circular scrubber immediately
@@ -163,7 +168,8 @@ export function renderPlayerView(container, { audioEngine, onBack, onOpenLyrics,
       const cur = isNaN(currentTime) ? 0 : currentTime;
       const dur = isNaN(duration) ? (audioEngine.currentTrack?.duration || 0) : duration;
       timeDisplay.innerHTML = `${formatTime(cur)} <span>|</span> ${formatTime(dur)}`;
-      updateCircleScrubber(progress);
+      const calcProg = (dur > 0 && cur >= 0) ? (cur / dur) : (progress || 0);
+      updateCircleScrubber(calcProg);
     }
   });
 

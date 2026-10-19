@@ -32,6 +32,19 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    public static void dispatchSeekAction(final double seconds) {
+        if (instance != null && instance.getBridge() != null && instance.getBridge().getWebView() != null) {
+            instance.runOnUiThread(() -> {
+                try {
+                    String js = "window.dispatchEvent(new CustomEvent('native-media-action', { detail: { action: 'seek', position: " + seconds + " } }));";
+                    instance.getBridge().getWebView().evaluateJavascript(js, null);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+        }
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -152,11 +165,20 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public void playTrack(String title, String artist, boolean isPlaying) {
+            updateState(title, artist, "MUSE", "", 0, 0, isPlaying);
+        }
+
+        @JavascriptInterface
+        public void updateState(String title, String artist, String album, String coverUrl, double durationSec, double currentSec, boolean isPlaying) {
             try {
                 Intent intent = new Intent(context, MusicForegroundService.class);
                 intent.setAction(MusicForegroundService.ACTION_UPDATE);
                 intent.putExtra("title", title);
                 intent.putExtra("artist", artist);
+                intent.putExtra("album", album);
+                intent.putExtra("coverUrl", coverUrl);
+                intent.putExtra("duration", (long)(durationSec * 1000));
+                intent.putExtra("currentTime", (long)(currentSec * 1000));
                 intent.putExtra("isPlaying", isPlaying);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent);
