@@ -1,0 +1,30 @@
+{
+  "name": "MUSE Music",
+  "short_name": "MUSE",
+  "description": "Elevate every moment with ad-free lossless music & offline vault",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EBEBE9",
+  "theme_color": "#EBEBE9",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
