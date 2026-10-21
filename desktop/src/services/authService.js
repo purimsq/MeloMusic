@@ -11,6 +11,7 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { resolveApiUrl } from '../config/api.js';
 import { networkService } from './networkService.js';
+import { playerStore } from './playerStore.js';
 
 const STORAGE_KEYS = {
   USER_PROFILE: 'muse_pc_user_profile',
@@ -112,11 +113,14 @@ class AuthService {
       if (this.userProfile) {
         this.userProfile.favoriteArtists = artists;
         this.setUserProfile(this.userProfile);
-        // Sync to Firestore if logged in
-        if (this.currentUser && db) {
-          const userRef = doc(db, 'users', this.currentUser.uid);
-          setDoc(userRef, { favoriteArtists: artists }, { merge: true }).catch(() => {});
-        }
+      }
+      // Sync to Firestore if user is logged in
+      const activeUser = this.currentUser || auth?.currentUser;
+      if (activeUser && db) {
+        const userRef = doc(db, 'users', activeUser.uid);
+        setDoc(userRef, { favoriteArtists: artists, updatedAt: Date.now() }, { merge: true }).catch((err) => {
+          console.warn('Firestore favoriteArtists sync error:', err);
+        });
       }
     } catch (e) {
       console.warn('Failed to save favorite artists:', e);
@@ -139,6 +143,10 @@ class AuthService {
 
         if (snapshot.exists()) {
           const data = snapshot.data();
+          const artists = (Array.isArray(data.favoriteArtists) && data.favoriteArtists.length > 0)
+            ? data.favoriteArtists
+            : this.getFavoriteArtists();
+
           const profile = {
             uid: user.uid,
             name: data.name || user.displayName || fallbackName,
@@ -146,10 +154,27 @@ class AuthService {
             photoURL: data.photoURL || user.photoURL || null,
             isLoggedIn: true,
             provider: providerId,
-            favoriteArtists: data.favoriteArtists || this.getFavoriteArtists(),
+            favoriteArtists: artists,
             createdAt: data.createdAt || Date.now(),
             lastLogin: Date.now()
           };
+
+          // Synchronize favorite artists in local storage for instantaneous startup
+          if (Array.isArray(data.favoriteArtists) && data.favoriteArtists.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.FAVORITE_ARTISTS, JSON.stringify(data.favoriteArtists));
+          }
+
+          // Restore song metadata from Firestore into playerStore
+          if (Array.isArray(data.likedSongs)) {
+            playerStore.setLikedSongsFromCloud(data.likedSongs);
+          }
+          if (Array.isArray(data.playlists) && data.playlists.length > 0) {
+            playerStore.setPlaylistsFromCloud(data.playlists);
+          }
+          if (Array.isArray(data.recentActivity) && data.recentActivity.length > 0) {
+            playerStore.setRecentActivityFromCloud(data.recentActivity);
+          }
+
           // Update lastLogin timestamp in Firestore
           await setDoc(userRef, { lastLogin: Date.now(), photoURL: profile.photoURL }, { merge: true });
           this.setUserProfile(profile);
@@ -164,6 +189,9 @@ class AuthService {
             isLoggedIn: true,
             provider: providerId,
             favoriteArtists: this.getFavoriteArtists(),
+            likedSongs: playerStore.getLikedSongs(),
+            playlists: playerStore.getPlaylists(),
+            recentActivity: playerStore.getRecentActivity(),
             createdAt: Date.now(),
             lastLogin: Date.now()
           };

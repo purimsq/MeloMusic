@@ -43,7 +43,7 @@ export function YouTubePlayerHost({
       if (window.YT && window.YT.Player && containerRef.current) {
         if (!playerRef.current) {
           try {
-            const initialVid = videoId || '09R8_2nJtjg';
+            const initialVid = videoId || 'M7lc1UVf-VE';
             currentLoadedVideoIdRef.current = initialVid;
             playerRef.current = new window.YT.Player(containerRef.current, {
               height: '100%',
@@ -60,9 +60,7 @@ export function YouTubePlayerHost({
                 modestbranding: 1,
                 iv_load_policy: 3,
                 cc_load_policy: 0,
-                origin: typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')
-                  ? window.location.origin
-                  : 'https://www.youtube.com'
+                origin: typeof window !== 'undefined' ? window.location.origin : undefined
               },
               events: {
                 onReady: (event) => {
@@ -85,6 +83,10 @@ export function YouTubePlayerHost({
                     } catch (err) {
                       console.warn('onReady video load error:', err);
                     }
+                  } else if (isPlaying) {
+                    try {
+                      event.target.playVideo();
+                    } catch {}
                   }
                 },
                 onStateChange: (event) => {
@@ -160,6 +162,13 @@ export function YouTubePlayerHost({
           }
         } catch (e) {
           console.warn('Load video error:', e);
+        }
+      } else if (isPlaying && typeof playerRef.current.playVideo === 'function') {
+        const state = typeof playerRef.current.getPlayerState === 'function' ? playerRef.current.getPlayerState() : -1;
+        if (state !== 1 && state !== 3) {
+          try {
+            playerRef.current.playVideo();
+          } catch {}
         }
       }
     }

@@ -1,5 +1,7 @@
 // Central State Store for Playback, Liked Songs, Playlists, and Recent Activity
-// Persisted in localStorage for seamless sessions
+// Persisted in localStorage and synchronized with Firebase Firestore when logged in
+import { auth, db } from './firebase.js';
+import { doc, setDoc } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
   LIKED: 'melo_desktop_liked_songs',
@@ -11,6 +13,7 @@ const STORAGE_KEYS = {
 class PlayerStore {
   constructor() {
     this.subscribers = new Set();
+    this.cloudSyncTimer = null;
     this.likedSongs = this.load(STORAGE_KEYS.LIKED, []);
     this.playlists = this.load(STORAGE_KEYS.PLAYLISTS, [
       {
@@ -105,7 +108,67 @@ class PlayerStore {
 
     this.save(STORAGE_KEYS.LIKED, this.likedSongs);
     this.notify('likedChange', { track, isLiked, message, count: this.likedSongs.length });
+    this.scheduleCloudSync();
     return { isLiked, message };
+  }
+
+  // Cloud restoration methods (invoked on login / session sync)
+  setLikedSongsFromCloud(tracks) {
+    if (!Array.isArray(tracks)) return;
+    this.likedSongs = tracks;
+    this.save(STORAGE_KEYS.LIKED, tracks);
+    this.notify('likedChange', { count: tracks.length });
+  }
+
+  setPlaylistsFromCloud(playlists) {
+    if (!Array.isArray(playlists)) return;
+    this.playlists = playlists;
+    this.save(STORAGE_KEYS.PLAYLISTS, playlists);
+    this.notify('playlistsChange', { playlists });
+  }
+
+  setRecentActivityFromCloud(recent) {
+    if (!Array.isArray(recent)) return;
+    this.recentActivity = recent;
+    this.save(STORAGE_KEYS.RECENT, recent);
+    this.notify('recentChange', { recentActivity: recent });
+  }
+
+  scheduleCloudSync() {
+    if (this.cloudSyncTimer) clearTimeout(this.cloudSyncTimer);
+    this.cloudSyncTimer = setTimeout(() => {
+      this.syncToCloud();
+    }, 400);
+  }
+
+  async syncToCloud() {
+    try {
+      const user = auth?.currentUser;
+      if (!user || !db) return;
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(
+        userRef,
+        {
+          likedSongs: this.likedSongs.map((t) => ({
+            id: t.id,
+            videoId: t.videoId || t.id,
+            title: t.title || '',
+            artist: t.artist || '',
+            album: t.album || '',
+            duration: t.duration || 0,
+            durationFormatted: t.durationFormatted || '3:30',
+            cover: t.cover || '',
+            likedAt: t.likedAt || Date.now()
+          })),
+          playlists: this.playlists,
+          recentActivity: this.recentActivity.slice(0, 30),
+          updatedAt: Date.now()
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('playerStore cloud sync notice:', e);
+    }
   }
 
   // PLAYLISTS
@@ -131,6 +194,7 @@ class PlayerStore {
     this.playlists.unshift(newPl);
     this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
     this.notify('playlistsChange', { playlists: this.playlists, newPlaylist: newPl });
+    this.scheduleCloudSync();
     return newPl;
   }
 
@@ -146,6 +210,7 @@ class PlayerStore {
       }
       this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
       this.notify('playlistsChange', { playlists: this.playlists, updatedPlaylist: pl });
+      this.scheduleCloudSync();
       return true;
     }
     return false;
@@ -158,6 +223,7 @@ class PlayerStore {
     pl.tracks = pl.tracks.filter((t) => t.id !== trackId && t.videoId !== trackId);
     this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
     this.notify('playlistsChange', { playlists: this.playlists, updatedPlaylist: pl });
+    this.scheduleCloudSync();
     return true;
   }
 
@@ -187,12 +253,14 @@ class PlayerStore {
 
     this.save(STORAGE_KEYS.RECENT, this.recentActivity);
     this.notify('recentChange', { recentActivity: this.recentActivity });
+    this.scheduleCloudSync();
   }
 
   clearRecentActivity() {
     this.recentActivity = [];
     this.save(STORAGE_KEYS.RECENT, []);
     this.notify('recentChange', { recentActivity: [] });
+    this.scheduleCloudSync();
   }
 
   // SETTINGS

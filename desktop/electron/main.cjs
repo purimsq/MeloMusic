@@ -1,7 +1,62 @@
 const { app, BrowserWindow, shell, ipcMain, session, nativeImage } = require('electron');
 const path = require('path');
+const http = require('http');
+const fs = require('fs');
+
+// Ensure Chromium permits media playback without blocking on initial user gesture
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let mainWindow = null;
+let localServer = null;
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf'
+};
+
+function startLocalServer(distDir) {
+  return new Promise((resolve) => {
+    if (localServer) {
+      const port = localServer.address().port;
+      return resolve(port);
+    }
+    localServer = http.createServer((req, res) => {
+      let reqPath = (req.url || '/').split('?')[0];
+      if (reqPath === '/' || reqPath === '') reqPath = '/index.html';
+      const safePath = path.normalize(reqPath).replace(/^(\.\.[\/\\])+/, '');
+      let filePath = path.join(distDir, safePath);
+
+      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        filePath = path.join(distDir, 'index.html');
+      }
+
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*'
+      });
+      fs.createReadStream(filePath).pipe(res);
+    });
+
+    localServer.listen(0, 'localhost', () => {
+      const port = localServer.address().port;
+      resolve(port);
+    });
+  });
+}
 
 // Enforce single instance lock
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -89,12 +144,22 @@ function createWindow() {
       }, 1000);
     });
   } else {
-    // In production build, load the compiled dist index.html
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // In production build, serve dist via local loopback server so YouTube Iframe API has a valid origin and autoplay permissions
+    startLocalServer(path.join(__dirname, '../dist')).then((port) => {
+      if (mainWindow) {
+        mainWindow.loadURL(`http://localhost:${port}`);
+      }
+    });
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (localServer) {
+      try {
+        localServer.close();
+      } catch {}
+      localServer = null;
+    }
   });
 }
 
