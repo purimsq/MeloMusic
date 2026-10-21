@@ -206,6 +206,9 @@ export function MainAppView({ userProfile, onSignOut }) {
   const currentTrackRef = useRef(currentTrack);
   currentTrackRef.current = currentTrack;
 
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
   const currentTimeRef = useRef(currentTime);
   currentTimeRef.current = currentTime;
 
@@ -822,14 +825,15 @@ export function MainAppView({ userProfile, onSignOut }) {
 
   // Master Play/Pause Toggle with explicit user intention tracking
   const handleTogglePlay = () => {
-    if (!hasPlayedTrack || !currentTrack) {
+    const activeTrack = currentTrackRef.current || currentTrack;
+    if (!activeTrack) {
       if (homeFeed.quickPicks && homeFeed.quickPicks[0]) {
         handlePlayTrack(homeFeed.quickPicks[0], true);
       }
       return;
     }
 
-    if (isPlaying) {
+    if (isPlayingRef.current) {
       userRequestedPauseRef.current = true;
       setIsPlaying(false);
       persistPlaybackSession();
@@ -845,32 +849,40 @@ export function MainAppView({ userProfile, onSignOut }) {
     }
   };
 
-  // Spacebar Play / Pause toggle (when not typing in an input or textarea)
+  // Global Spacebar Play / Pause toggle (when not typing in an input or textarea)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-      if (
-        activeTag === 'input' ||
+      const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar' || e.keyCode === 32;
+      const isFKey = e.key === 'f' || e.key === 'F';
+
+      if (!isSpace && !isFKey) return;
+
+      const activeEl = document.activeElement;
+      const activeTag = activeEl ? activeEl.tagName.toLowerCase() : '';
+      const isTextEntry =
         activeTag === 'textarea' ||
-        document.activeElement?.isContentEditable
-      ) {
+        activeEl?.isContentEditable ||
+        (activeTag === 'input' && !['button', 'submit', 'checkbox', 'radio', 'range'].includes(activeEl.type?.toLowerCase()));
+
+      if (isTextEntry) {
         return;
       }
 
-      if (e.code === 'Space' || e.key === ' ') {
-        if (!hasPlayedTrack || !currentTrack) return;
+      if (isSpace) {
         e.preventDefault();
+        e.stopPropagation();
         handleTogglePlay();
-      } else if (e.key === 'f' || e.key === 'F') {
-        if (!hasPlayedTrack || !currentTrack) return;
+      } else if (isFKey) {
+        const cur = currentTrackRef.current || currentTrack;
+        if (!cur) return;
         e.preventDefault();
         handleToggleFullscreen();
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasPlayedTrack, currentTrack, ytPlayer, isPlaying, isFullscreen]);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [ytPlayer, homeFeed]);
 
   // Skip Next / Prev with Auto-Replenishment on End
   const handleNextTrack = async () => {
