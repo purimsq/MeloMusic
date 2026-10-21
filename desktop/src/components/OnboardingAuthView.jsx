@@ -17,6 +17,20 @@ export function OnboardingAuthView({ onAuthSuccess }) {
   const [fallbackMode, setFallbackMode] = useState(null); // 'guest' | 'no-account'
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => networkService.isOnline);
+  const [resendCooldown, setResendCooldown] = useState(30);
+
+  // 30-Second Countdown Timer for OTP Resend
+  useEffect(() => {
+    let timer = null;
+    if (mode === 'otp' && resendCooldown > 0) {
+      timer = setInterval(() => {
+        setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [mode, resendCooldown]);
 
   // Real-time network monitor
   useEffect(() => {
@@ -89,9 +103,10 @@ export function OnboardingAuthView({ onAuthSuccess }) {
 
       setIsLoading(true);
       try {
-        const res = await authService.initiateSignUpWithOtp(name, email, password);
+        await authService.initiateSignUpWithOtp(name, email, password);
         setIsLoading(false);
         setMode('otp');
+        setResendCooldown(30);
       } catch (err) {
         setIsLoading(false);
         setErrorMessage(err.message || 'Failed to dispatch verification code.');
@@ -190,21 +205,27 @@ export function OnboardingAuthView({ onAuthSuccess }) {
     }, 500);
   };
 
-  // OTP Resend
+  // OTP Resend with 30s rate-limit and automatic invalidation of previous OTP
   const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isLoading) return;
     if (!authService.pendingOtp) return;
     if (!isOnline && !networkService.isOnline) {
       setErrorMessage('Active internet connection required to resend verification code. Please check your network.');
       return;
     }
+    setIsLoading(true);
+    setErrorMessage('');
     try {
       const { name, email, password } = authService.pendingOtp;
-      const res = await authService.initiateSignUpWithOtp(name, email, password);
-      if (res.devCode) setDevCodeHint(res.devCode);
-      setErrorMessage('');
-      alert(`A new verification code has been dispatched to ${email}`);
+      await authService.initiateSignUpWithOtp(name, email, password);
+      setIsLoading(false);
+      setResendCooldown(30);
+      setOtpCode('');
+      setSuccessNotice(`A fresh verification code was sent to ${email}. Any previous code is now invalid.`);
+      setTimeout(() => setSuccessNotice(''), 6000);
     } catch (err) {
-      setErrorMessage('Failed to resend code: ' + err.message);
+      setIsLoading(false);
+      setErrorMessage('Failed to resend code: ' + (err.message || 'Error'));
     }
   };
 
@@ -606,8 +627,10 @@ export function OnboardingAuthView({ onAuthSuccess }) {
                       type="button"
                       className="btn-link-action"
                       onClick={handleResendOtp}
+                      disabled={resendCooldown > 0 || isLoading}
+                      style={resendCooldown > 0 ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                     >
-                      Resend Code
+                      {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : 'Resend Code'}
                     </button>
                     <button
                       type="button"

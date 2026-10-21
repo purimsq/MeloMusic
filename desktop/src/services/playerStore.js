@@ -129,9 +129,10 @@ class PlayerStore {
 
   setRecentActivityFromCloud(recent) {
     if (!Array.isArray(recent)) return;
-    this.recentActivity = recent;
-    this.save(STORAGE_KEYS.RECENT, recent);
-    this.notify('recentChange', { recentActivity: recent });
+    const capped = recent.slice(0, 34);
+    this.recentActivity = capped;
+    this.save(STORAGE_KEYS.RECENT, capped);
+    this.notify('recentChange', { recentActivity: capped });
   }
 
   scheduleCloudSync() {
@@ -161,7 +162,18 @@ class PlayerStore {
             likedAt: t.likedAt || Date.now()
           })),
           playlists: this.playlists,
-          recentActivity: this.recentActivity.slice(0, 30),
+          // FIFO: Persist strictly the latest 34 tracks to prevent database bloating
+          recentActivity: this.recentActivity.slice(0, 34).map((t) => ({
+            id: t.id,
+            videoId: t.videoId || t.id,
+            title: t.title || '',
+            artist: t.artist || '',
+            album: t.album || '',
+            duration: t.duration || 0,
+            durationFormatted: t.durationFormatted || '3:30',
+            cover: t.cover || '',
+            playedAt: t.playedAt || Date.now()
+          })),
           updatedAt: Date.now()
         },
         { merge: true }
@@ -246,9 +258,9 @@ class PlayerStore {
       playedAt: Date.now()
     });
 
-    // Keep max 50 recent tracks
-    if (this.recentActivity.length > 50) {
-      this.recentActivity = this.recentActivity.slice(0, 50);
+    // FIFO: Keep strictly the last 34 tracks; older tracks beyond 34 are automatically removed
+    if (this.recentActivity.length > 34) {
+      this.recentActivity = this.recentActivity.slice(0, 34);
     }
 
     this.save(STORAGE_KEYS.RECENT, this.recentActivity);

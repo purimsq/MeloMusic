@@ -570,7 +570,7 @@ export const Storage = {
     let list = this.getRecentHistory();
     list = list.filter(t => t.id !== track.id);
     list.unshift(track);
-    if (list.length > 50) list = list.slice(0, 50);
+    if (list.length > 34) list = list.slice(0, 34);
     localStorage.setItem(KEYS.RECENT_HISTORY, JSON.stringify(list));
   },
 

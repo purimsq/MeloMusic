@@ -41,7 +41,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MUSE"
+      "shortcutName": "MUSE",
+      "deleteAppDataOnUninstall": true,
+      "include": "electron/installer.nsh"
     },
     "publish": {
       "provider": "github",

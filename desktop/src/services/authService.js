@@ -273,6 +273,7 @@ class AuthService {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const cleanEmail = email.trim().toLowerCase();
 
+    // Store new OTP details (overwrites any previous code so old codes are instantly invalidated)
     this.pendingOtp = {
       name: name.trim() || 'Music Lover',
       email: cleanEmail,
@@ -281,23 +282,19 @@ class AuthService {
       timestamp: Date.now()
     };
 
-    try {
-      const res = await fetch(resolveApiUrl('/api/send-otp'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, code, name: this.pendingOtp.name })
-      });
+    const targetUrl = resolveApiUrl('/api/send-otp');
+    const res = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, code, name: this.pendingOtp.name })
+    });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to dispatch verification email');
-      }
-
-      return { success: true, message: `Verification code sent to ${cleanEmail}`, devCode: code };
-    } catch (err) {
-      console.warn('Backend send-otp notice, providing dev verification code:', err);
-      return { success: true, message: `Verification code sent to ${cleanEmail}`, devCode: code };
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || errData.message || 'Failed to dispatch verification email. Please check your address.');
     }
+
+    return { success: true, message: `Verification code sent to ${cleanEmail}` };
   }
 
   /**
