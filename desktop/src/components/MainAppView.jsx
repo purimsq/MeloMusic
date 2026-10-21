@@ -34,7 +34,9 @@ import {
   Loader2,
   Music,
   Film,
-  Trash2
+  Trash2,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { CURATED_ARTISTS } from '../data/curatedArtists';
 import { authService } from '../services/authService';
@@ -73,6 +75,8 @@ export function MainAppView({ userProfile, onSignOut }) {
   const [isQueueOpen, setIsQueueOpen] = useState(true);
   const [dockTab, setDockTab] = useState('upnext'); // 'upnext' | 'lyrics' | 'related'
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isHudVisible, setIsHudVisible] = useState(true);
+  const hudTimeoutRef = useRef(null);
   const [isEqualizerOpen, setIsEqualizerOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
@@ -144,6 +148,9 @@ export function MainAppView({ userProfile, onSignOut }) {
   // YouTube-Style Drag & Scrub State for Top Seek Bar
   const [isScrubbing, setIsScrubbing] = useState(false);
   const isScrubbingRef = useRef(false);
+  const justScrubbedRef = useRef(false);
+  const isSeekingRef = useRef(false);
+  const seekSettleTimeoutRef = useRef(null);
   const [scrubFraction, setScrubFraction] = useState(0);
   const wasPlayingBeforeScrubRef = useRef(false);
   const progressEdgeRef = useRef(null);
@@ -214,41 +221,108 @@ export function MainAppView({ userProfile, onSignOut }) {
     }, 4500);
   };
 
-  // Spacebar Play / Pause toggle (when not typing in an input or textarea)
+  // Explicit user-requested pause tracker: avoids getting trapped when YouTube fires state 2 while buffering or changing tracks
+  const userRequestedPauseRef = useRef(false);
+
+  // Fullscreen HUD Auto-Hide Idle Timer (YouTube behavior)
+  const resetHudTimer = () => {
+    setIsHudVisible(true);
+    if (hudTimeoutRef.current) clearTimeout(hudTimeoutRef.current);
+    if (isFullscreen && isPlaying && !isScrubbingRef.current) {
+      hudTimeoutRef.current = setTimeout(() => {
+        setIsHudVisible(false);
+      }, 2800);
+    }
+  };
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      setIsHudVisible(true);
+      if (hudTimeoutRef.current) clearTimeout(hudTimeoutRef.current);
+      return;
+    }
+
+    resetHudTimer();
+
+    const handleUserActivity = () => {
+      resetHudTimer();
+    };
+
+    window.addEventListener('mousemove', handleUserActivity);
+    window.addEventListener('mousedown', handleUserActivity);
+    window.addEventListener('touchstart', handleUserActivity);
+
+    return () => {
+      if (hudTimeoutRef.current) clearTimeout(hudTimeoutRef.current);
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('mousedown', handleUserActivity);
+      window.removeEventListener('touchstart', handleUserActivity);
+    };
+  }, [isFullscreen, isPlaying]);
+
+  // Global Keyboard Shortcuts: F for Fullscreen, Space for Play/Pause, Esc for exit
   useEffect(() => {
     const handleKeyDown = (e) => {
-      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-      if (
-        activeTag === 'input' ||
-        activeTag === 'textarea' ||
-        document.activeElement?.isContentEditable
-      ) {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) {
         return;
       }
-
-      if (e.code === 'Space' || e.key === ' ') {
-        if (!hasPlayedTrack || !currentTrack) return;
+      if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
-
-        setIsPlaying((prev) => {
-          const next = !prev;
-          if (ytPlayer) {
-            try {
-              if (next && typeof ytPlayer.playVideo === 'function') {
-                ytPlayer.playVideo();
-              } else if (!next && typeof ytPlayer.pauseVideo === 'function') {
-                ytPlayer.pauseVideo();
-              }
-            } catch {}
-          }
-          return next;
-        });
+        handleToggleFullscreen();
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        handleTogglePlay();
+      } else if (e.key === 'Escape' && isFullscreen) {
+        e.preventDefault();
+        handleToggleFullscreen();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasPlayedTrack, currentTrack, ytPlayer]);
+  }, [isFullscreen, isPlaying]);
+
+  // Fullscreen toggle handler with browser Fullscreen API synchronization
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      setIsFullscreen(true);
+      if (activeNav !== 'now-playing') {
+        navigateTo('now-playing');
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+      setIsFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      const isNowFs = !!document.fullscreenElement;
+      setIsFullscreen(isNowFs);
+      if (isNowFs && activeNav !== 'now-playing') {
+        navigateTo('now-playing');
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('webkitfullscreenchange', handleFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFsChange);
+      document.removeEventListener('webkitfullscreenchange', handleFsChange);
+    };
+  }, [activeNav]);
+
+  // Fullscreen view lock: ensure that while in fullscreen, activeNav stays pinned to 'now-playing'
+  useEffect(() => {
+    if (isFullscreen && activeNav !== 'now-playing') {
+      setActiveNav('now-playing');
+    }
+  }, [isFullscreen, activeNav]);
 
   // Dynamic Greeting
   const getGreeting = () => {
@@ -275,45 +349,48 @@ export function MainAppView({ userProfile, onSignOut }) {
 
   const handleScrubStart = (e) => {
     e.stopPropagation();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    if (e.button !== undefined && e.button !== 0) return;
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    if (clientX === undefined) return;
     const frac = calculateFraction(clientX);
+    justScrubbedRef.current = true;
     isScrubbingRef.current = true;
     setIsScrubbing(true);
     setScrubFraction(frac);
+    setCurrentTime(Math.floor(frac * duration));
     wasPlayingBeforeScrubRef.current = isPlaying;
-
-    // Pause audio while user is dragging just like YouTube
-    if (isPlaying) {
-      setIsPlaying(false);
-      if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
-        try {
-          ytPlayer.pauseVideo();
-        } catch {}
-      }
-    }
   };
 
   useEffect(() => {
     if (!isScrubbing) return;
 
     const handleScrubMove = (e) => {
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+      if (clientX === undefined) return;
       const frac = calculateFraction(clientX);
       setScrubFraction(frac);
+      setCurrentTime(Math.floor(frac * duration));
     };
 
     const handleScrubEnd = (e) => {
-      const clientX = e.changedTouches
+      const clientX = e.changedTouches && e.changedTouches.length > 0
         ? e.changedTouches[0].clientX
-        : e.touches
+        : e.touches && e.touches.length > 0
         ? e.touches[0].clientX
         : e.clientX;
-      const frac = calculateFraction(clientX);
+      const frac = clientX !== undefined ? calculateFraction(clientX) : scrubFraction;
       const targetTime = Math.floor(frac * duration);
 
       isScrubbingRef.current = false;
       setIsScrubbing(false);
       setCurrentTime(targetTime);
+
+      // Seek settling guard: prevent stale YouTube polling from reverting time for 700ms
+      isSeekingRef.current = true;
+      if (seekSettleTimeoutRef.current) clearTimeout(seekSettleTimeoutRef.current);
+      seekSettleTimeoutRef.current = setTimeout(() => {
+        isSeekingRef.current = false;
+      }, 700);
 
       if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
         try {
@@ -330,6 +407,11 @@ export function MainAppView({ userProfile, onSignOut }) {
           } catch {}
         }
       }
+
+      // Block any synthetic click events on footer from minimizing player
+      setTimeout(() => {
+        justScrubbedRef.current = false;
+      }, 450);
     };
 
     window.addEventListener('mousemove', handleScrubMove);
@@ -343,7 +425,7 @@ export function MainAppView({ userProfile, onSignOut }) {
       window.removeEventListener('touchmove', handleScrubMove);
       window.removeEventListener('touchend', handleScrubEnd);
     };
-  }, [isScrubbing, duration, ytPlayer]);
+  }, [isScrubbing, duration, ytPlayer, scrubFraction]);
 
   // Subscribe to PlayerStore updates
   useEffect(() => {
@@ -520,6 +602,8 @@ export function MainAppView({ userProfile, onSignOut }) {
   // Toggle player maximize / minimize
   const handleTogglePlayerExpand = () => {
     setIsSearchDropdownOpen(false);
+    if (isFullscreen) return; // Never minimize while in fullscreen
+    if (isScrubbingRef.current || justScrubbedRef.current) return; // Never minimize during or immediately after seeking
     if (activeNav === 'now-playing') {
       for (let i = historyIndex - 1; i >= 0; i--) {
         if (navHistory[i] && navHistory[i].nav !== 'now-playing') {
@@ -540,10 +624,25 @@ export function MainAppView({ userProfile, onSignOut }) {
   // Play Track & Fetch Real Radio Queue (with automatic replenishment for short playlists)
   const handlePlayTrack = async (track, switchViewToPlayer = false, customQueue = null) => {
     if (!track) return;
+    userRequestedPauseRef.current = false;
     markTransitioning();
 
+    // Defensively resolve videoId so no track ever fails with undefined ID
+    const resolvedVideoId = track.videoId || track.youtubeId || (typeof track.id === 'string' && track.id.startsWith('yt-') ? track.id.replace('yt-', '') : track.id);
+    const normalizedTrack = {
+      ...track,
+      videoId: resolvedVideoId
+    };
+
+    // Unlock audio context immediately within user click gesture
+    try {
+      const unlockAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+      unlockAudio.volume = 0.001;
+      unlockAudio.play().catch(() => {});
+    } catch {}
+
     // If clicking the song that is currently playing, restart from beginning
-    if (currentTrack?.videoId === track.videoId && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+    if (currentTrack?.videoId === normalizedTrack.videoId && ytPlayer && typeof ytPlayer.seekTo === 'function') {
       setCurrentTime(0);
       try {
         ytPlayer.seekTo(0, true);
@@ -554,8 +653,23 @@ export function MainAppView({ userProfile, onSignOut }) {
       return;
     }
 
-    setCurrentTrack(track);
-    currentTrackRef.current = track;
+    // Direct synchronous play in user click gesture
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && normalizedTrack.videoId) {
+      try {
+        ytPlayer.loadVideoById(normalizedTrack.videoId, 0);
+        ytPlayer.playVideo();
+      } catch (err) {
+        console.warn('Direct YT play error:', err);
+      }
+    }
+
+    // Set duration immediately from track metadata so progress bar and time indicator display instantly
+    if (normalizedTrack.duration && Number(normalizedTrack.duration) > 0) {
+      setDuration(Number(normalizedTrack.duration));
+    }
+
+    setCurrentTrack(normalizedTrack);
+    currentTrackRef.current = normalizedTrack;
     setHasPlayedTrack(true);
     setIsPlaying(true);
     setCurrentTime(0);
@@ -563,14 +677,14 @@ export function MainAppView({ userProfile, onSignOut }) {
     if (customQueue && Array.isArray(customQueue) && customQueue.length > 0) {
       setQueue(customQueue);
       queueRef.current = customQueue;
-      const idx = customQueue.findIndex((t) => (t.videoId && t.videoId === track.videoId) || t.id === track.id);
+      const idx = customQueue.findIndex((t) => (t.videoId && t.videoId === normalizedTrack.videoId) || t.id === normalizedTrack.id);
       const targetIdx = idx >= 0 ? idx : 0;
       setQueueIndex(targetIdx);
       queueIndexRef.current = targetIdx;
 
       // If the playlist or queue is short (<= 8 tracks), automatically fetch YouTube recommendations to append
-      if (customQueue.length <= 8 && track.videoId) {
-        youtubeMusicService.getRadioQueue(track.videoId, track).then((extra) => {
+      if (customQueue.length <= 8 && normalizedTrack.videoId) {
+        youtubeMusicService.getRadioQueue(normalizedTrack.videoId, normalizedTrack).then((extra) => {
           if (extra && extra.length > 0) {
             setQueue((prevQueue) => {
               const existingIds = new Set(prevQueue.map((t) => t.videoId || t.id));
@@ -584,12 +698,12 @@ export function MainAppView({ userProfile, onSignOut }) {
       }
     } else {
       // Set current track as initial queue, then fetch 50-track YouTube Music Radio
-      setQueue([track]);
-      queueRef.current = [track];
+      setQueue([normalizedTrack]);
+      queueRef.current = [normalizedTrack];
       setQueueIndex(0);
       queueIndexRef.current = 0;
       try {
-        const fullRadio = await youtubeMusicService.getRadioQueue(track.videoId, track);
+        const fullRadio = await youtubeMusicService.getRadioQueue(normalizedTrack.videoId, normalizedTrack);
         if (fullRadio && fullRadio.length > 0) {
           setQueue(fullRadio);
           queueRef.current = fullRadio;
@@ -604,6 +718,57 @@ export function MainAppView({ userProfile, onSignOut }) {
     }
   };
 
+  // Master Play/Pause Toggle with explicit user intention tracking
+  const handleTogglePlay = () => {
+    if (!hasPlayedTrack || !currentTrack) {
+      if (homeFeed.quickPicks && homeFeed.quickPicks[0]) {
+        handlePlayTrack(homeFeed.quickPicks[0], true);
+      }
+      return;
+    }
+
+    if (isPlaying) {
+      userRequestedPauseRef.current = true;
+      setIsPlaying(false);
+      if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+        try { ytPlayer.pauseVideo(); } catch {}
+      }
+    } else {
+      userRequestedPauseRef.current = false;
+      setIsPlaying(true);
+      if (ytPlayer && typeof ytPlayer.playVideo === 'function') {
+        try { ytPlayer.playVideo(); } catch {}
+      }
+    }
+  };
+
+  // Spacebar Play / Pause toggle (when not typing in an input or textarea)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        document.activeElement?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space' || e.key === ' ') {
+        if (!hasPlayedTrack || !currentTrack) return;
+        e.preventDefault();
+        handleTogglePlay();
+      } else if (e.key === 'f' || e.key === 'F') {
+        if (!hasPlayedTrack || !currentTrack) return;
+        e.preventDefault();
+        handleToggleFullscreen();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hasPlayedTrack, currentTrack, ytPlayer, isPlaying, isFullscreen]);
+
   // Skip Next / Prev with Auto-Replenishment on End
   const handleNextTrack = async () => {
     const q = queueRef.current;
@@ -612,6 +777,7 @@ export function MainAppView({ userProfile, onSignOut }) {
     const curTrk = currentTrackRef.current;
 
     if (!q || q.length === 0) return;
+    userRequestedPauseRef.current = false;
     markTransitioning();
 
     if (repMode === 'one' && curTrk) {
@@ -644,10 +810,22 @@ export function MainAppView({ userProfile, onSignOut }) {
               queueRef.current = updatedQueue;
               setQueueIndex(nextIdx);
               queueIndexRef.current = nextIdx;
-              setCurrentTrack(updatedQueue[nextIdx]);
-              currentTrackRef.current = updatedQueue[nextIdx];
+              const nextRaw = updatedQueue[nextIdx];
+              const nextResolvedId = nextRaw.videoId || nextRaw.youtubeId || (typeof nextRaw.id === 'string' && nextRaw.id.startsWith('yt-') ? nextRaw.id.replace('yt-', '') : nextRaw.id);
+              const nextTrk = { ...nextRaw, videoId: nextResolvedId };
+              setCurrentTrack(nextTrk);
+              currentTrackRef.current = nextTrk;
+              if (nextTrk.duration && Number(nextTrk.duration) > 0) {
+                setDuration(Number(nextTrk.duration));
+              }
               setIsPlaying(true);
               setCurrentTime(0);
+              if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && nextTrk.videoId) {
+                try {
+                  ytPlayer.loadVideoById(nextTrk.videoId, 0);
+                  ytPlayer.playVideo();
+                } catch (err) {}
+              }
               return;
             }
           }
@@ -660,10 +838,22 @@ export function MainAppView({ userProfile, onSignOut }) {
 
     setQueueIndex(nextIdx);
     queueIndexRef.current = nextIdx;
-    setCurrentTrack(q[nextIdx]);
-    currentTrackRef.current = q[nextIdx];
+    const nextRaw = q[nextIdx];
+    const nextResolvedId = nextRaw.videoId || nextRaw.youtubeId || (typeof nextRaw.id === 'string' && nextRaw.id.startsWith('yt-') ? nextRaw.id.replace('yt-', '') : nextRaw.id);
+    const nextTrk = { ...nextRaw, videoId: nextResolvedId };
+    setCurrentTrack(nextTrk);
+    currentTrackRef.current = nextTrk;
+    if (nextTrk.duration && Number(nextTrk.duration) > 0) {
+      setDuration(Number(nextTrk.duration));
+    }
     setIsPlaying(true);
     setCurrentTime(0);
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && nextTrk.videoId) {
+      try {
+        ytPlayer.loadVideoById(nextTrk.videoId, 0);
+        ytPlayer.playVideo();
+      } catch (err) {}
+    }
   };
 
   const handlePrevTrack = () => {
@@ -676,6 +866,7 @@ export function MainAppView({ userProfile, onSignOut }) {
       return;
     }
     if (!q || q.length === 0) return;
+    userRequestedPauseRef.current = false;
     markTransitioning();
     let prevIdx = curIdx - 1;
     if (prevIdx < 0) {
@@ -683,10 +874,22 @@ export function MainAppView({ userProfile, onSignOut }) {
     }
     setQueueIndex(prevIdx);
     queueIndexRef.current = prevIdx;
-    setCurrentTrack(q[prevIdx]);
-    currentTrackRef.current = q[prevIdx];
+    const prevRaw = q[prevIdx];
+    const prevResolvedId = prevRaw.videoId || prevRaw.youtubeId || (typeof prevRaw.id === 'string' && prevRaw.id.startsWith('yt-') ? prevRaw.id.replace('yt-', '') : prevRaw.id);
+    const prevTrk = { ...prevRaw, videoId: prevResolvedId };
+    setCurrentTrack(prevTrk);
+    currentTrackRef.current = prevTrk;
+    if (prevTrk.duration && Number(prevTrk.duration) > 0) {
+      setDuration(Number(prevTrk.duration));
+    }
     setIsPlaying(true);
     setCurrentTime(0);
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && prevTrk.videoId) {
+      try {
+        ytPlayer.loadVideoById(prevTrk.videoId, 0);
+        ytPlayer.playVideo();
+      } catch (err) {}
+    }
   };
 
   // Audio / Video Switcher with Official Video Resolution, Timestamp Preservation and Spinner
@@ -824,7 +1027,7 @@ export function MainAppView({ userProfile, onSignOut }) {
 
   return (
     <div
-      className={`desktop-main-app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''} ${(!isQueueOpen || !hasPlayedTrack) ? 'queue-closed' : ''} ${!hasPlayedTrack ? 'no-active-player' : ''} ${isFullscreen ? 'fullscreen-active' : ''}`}
+      className={`desktop-main-app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''} ${(!isQueueOpen || !hasPlayedTrack) ? 'queue-closed' : ''} ${!hasPlayedTrack ? 'no-active-player' : ''} ${isFullscreen ? 'fullscreen-active' : ''} ${isFullscreen ? (playerMode === 'video' ? 'fs-video-mode' : 'fs-song-mode') : ''} ${isFullscreen && !isHudVisible ? 'is-cursor-hidden' : ''}`}
     >
       {/* Floating Toast Notification */}
       {toastMessage && (
@@ -1552,7 +1755,7 @@ export function MainAppView({ userProfile, onSignOut }) {
           <div
             className={`page-view-stage now-playing-stage ${activeNav === 'now-playing' ? 'stage-visible' : 'stage-offscreen'}`}
           >
-            {!currentTrack ? (
+            {!currentTrack && activeNav === 'now-playing' && (
               <div className="empty-player-card">
                 <div className="empty-player-icon-aura">
                   <Disc size={44} />
@@ -1572,106 +1775,188 @@ export function MainAppView({ userProfile, onSignOut }) {
                   Start Listening
                 </button>
               </div>
-            ) : (
-              <div className="now-playing-full-view">
-                {/* Top Song / Video Switcher Pill (Matching index.css and YT Music) */}
-                <div className="now-playing-pill-container">
-                  <div className="song-video-switcher-pill">
-                    <button
-                      type="button"
-                      className={`pill-switch-btn ${playerMode === 'song' ? 'active' : ''}`}
-                      onClick={() => handleSwitchPlayerMode('song')}
-                    >
-                      <Music size={14} />
-                      <span>Song</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`pill-switch-btn ${playerMode === 'video' ? 'active' : ''}`}
-                      onClick={() => handleSwitchPlayerMode('video')}
-                    >
-                      <Film size={14} />
-                      <span>Video</span>
-                    </button>
-                  </div>
+            )}
+
+            <div
+              className={`now-playing-full-view ${!currentTrack ? 'now-playing-preloading' : ''}`}
+              style={!currentTrack ? { position: 'absolute', opacity: 0.001, pointerEvents: 'none', zIndex: -10 } : undefined}
+            >
+              {/* Top Song / Video Switcher Pill (Matching index.css and YT Music) */}
+              <div className="now-playing-pill-container">
+                <div className="song-video-switcher-pill">
+                  <button
+                    type="button"
+                    className={`pill-switch-btn ${playerMode === 'song' ? 'active' : ''}`}
+                    onClick={() => handleSwitchPlayerMode('song')}
+                  >
+                    <Music size={14} />
+                    <span>Song</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`pill-switch-btn ${playerMode === 'video' ? 'active' : ''}`}
+                    onClick={() => handleSwitchPlayerMode('video')}
+                  >
+                    <Film size={14} />
+                    <span>Video</span>
+                  </button>
                 </div>
+              </div>
 
-                {/* Mode Switching Spinner Card */}
-                {isSwitchingMode && (
-                  <div className="player-mode-switching-overlay">
-                    <div className="ceramic-spinner" />
-                    <span className="switching-text">
-                      {playerMode === 'video' ? 'Loading Video Stream...' : 'Switching to Audio Mode...'}
-                    </span>
-                  </div>
-                )}
+              {/* Mode Switching Spinner Card */}
+              {isSwitchingMode && (
+                <div className="player-mode-switching-overlay">
+                  <div className="ceramic-spinner" />
+                  <span className="switching-text">
+                    {playerMode === 'video' ? 'Loading Video Stream...' : 'Switching to Audio Mode...'}
+                  </span>
+                </div>
+              )}
 
-                {/* FEATURED THEATER SECTION: 16:9 Video or Song Floral Scalloped Artwork */}
-                <section className="featured-theater-section">
-                  <div className={`theater-video-card ${playerMode === 'video' ? 'is-video-mode' : ''}`}>
-                    {/* Video Viewport (visible when video mode, offscreen host when song mode so audio continues) */}
-                    <div
-                      className={`video-viewport ${playerMode === 'video' ? 'viewport-video-visible' : 'viewport-audio-hidden'}`}
-                    >
-                      <YouTubePlayerHost
-                        videoId={currentTrack?.videoId}
-                        isPlaying={isPlaying}
-                        volume={volume}
-                        isMuted={isMuted}
-                        playerMode={playerMode}
-                        onReady={(player) => setYtPlayer(player)}
-                        onStateChange={(state) => {
-                          if (state === 1) {
-                            isTransitioningRef.current = false;
-                            setIsPlaying(true);
-                          } else if (state === 2) {
-                            if (!isTransitioningRef.current) {
-                              setIsPlaying(false);
-                            }
-                          } else if (state === 0) {
-                            handleNextTrack();
-                          }
-                        }}
-                        onTimeUpdate={(cur, dur) => {
-                          if (!isScrubbingRef.current) {
-                            setCurrentTime(cur);
-                          }
-                          if (dur > 0 && dur !== duration) setDuration(dur);
-                        }}
-                        onError={() => {
+              {/* FEATURED THEATER SECTION: 16:9 Video or Song Floral Scalloped Artwork */}
+              <section className="featured-theater-section">
+                <div className={`theater-video-card ${playerMode === 'video' ? 'is-video-mode' : ''}`}>
+                  {/* Video Viewport (visible when video mode, offscreen host when song mode so audio continues) */}
+                  <div
+                    className={`video-viewport ${playerMode === 'video' ? 'viewport-video-visible' : 'viewport-audio-hidden'}`}
+                  >
+                    <YouTubePlayerHost
+                      videoId={currentTrack?.videoId || currentTrack?.youtubeId || (typeof currentTrack?.id === 'string' && currentTrack?.id.startsWith('yt-') ? currentTrack.id.replace('yt-', '') : currentTrack?.id)}
+                      isPlaying={isPlaying}
+                      volume={volume}
+                      isMuted={isMuted}
+                      playerMode={playerMode}
+                      onReady={(player) => {
+                        setYtPlayer(player);
+                        if (currentTrackRef.current?.videoId) {
+                          try {
+                            player.loadVideoById(currentTrackRef.current.videoId, 0);
+                            player.playVideo();
+                          } catch {}
+                        }
+                      }}
+                      onStateChange={(state, player) => {
+                        const activeYT = player || ytPlayer;
+                        if (state === 1) { // PLAYING
+                          userRequestedPauseRef.current = false;
                           isTransitioningRef.current = false;
-                          showToast('Unable to stream this YouTube track, playing next...');
+                          setIsPlaying(true);
+                        } else if (state === 2) { // PAUSED
+                          if (!userRequestedPauseRef.current) {
+                            // Prevent spurious pause traps during stream initialization
+                            setTimeout(() => {
+                              if (!userRequestedPauseRef.current && activeYT && typeof activeYT.playVideo === 'function') {
+                                try { activeYT.playVideo(); } catch {}
+                              }
+                            }, 60);
+                            return;
+                          }
+                          setIsPlaying(false);
+                        } else if (state === 5 || state === -1) { // CUED or UNSTARTED
+                          if (!userRequestedPauseRef.current && activeYT && typeof activeYT.playVideo === 'function') {
+                            try { activeYT.playVideo(); } catch {}
+                          }
+                        } else if (state === 0) { // ENDED
                           handleNextTrack();
-                        }}
-                      />
-                    </div>
+                        }
+                      }}
+                      onTimeUpdate={(cur, dur) => {
+                        if (!isScrubbingRef.current && !isSeekingRef.current) {
+                          setCurrentTime(cur);
+                        }
+                        if (dur > 0 && dur !== duration) setDuration(dur);
+                      }}
+                      onError={() => {
+                        isTransitioningRef.current = false;
+                        showToast('Unable to stream this YouTube track, playing next...');
+                        handleNextTrack();
+                      }}
+                    />
 
-                    {/* Song Mode: Signature Organic Floral Scalloped Artwork Mask */}
-                    {playerMode === 'song' && (
-                      <div className="song-stage-viewport">
-                        <div className="song-scalloped-artwork-wrap">
-                          <div className="song-scalloped-aura" />
-                          <img
-                            src={currentTrack.cover}
-                            alt={currentTrack.title}
-                            className="song-scalloped-img"
-                            style={{ clipPath: 'url(#flower-mask-player)' }}
-                          />
-                        </div>
-                        <div className="song-stage-meta">
-                          <h2 className="song-stage-title">{currentTrack.title}</h2>
-                          <span className="song-stage-artist">{currentTrack.artist}</span>
-                          <div className="song-stage-tags">
-                            <span className="song-stage-chip">{currentTrack.album || 'Hi-Fi Master'}</span>
-                            <span className="song-stage-chip">LOSSLESS AUDIO</span>
+                    {/* Video Interaction Shield & Custom Non-Clickable Header */}
+                    {playerMode === 'video' && currentTrack && (
+                      <>
+                        {/* Transparent shield covering the iframe so clicks pause/play and YouTube links cannot be clicked */}
+                        <div
+                          className="video-click-shield video-interaction-shield"
+                          onClick={handleTogglePlay}
+                          onDoubleClick={handleToggleFullscreen}
+                          title="Click to play/pause, double click for full screen"
+                        />
+
+                        {/* Custom Header: Non-clickable Song Name & Artist + Fullscreen Toggle */}
+                        <div className={`video-custom-overlay-header ${isFullscreen && !isHudVisible ? 'hud-faded' : ''}`}>
+                          <div className="video-custom-title-block">
+                            <span className="video-custom-title">{currentTrack.title}</span>
+                            <span className="video-custom-artist">{currentTrack.artist}</span>
+                          </div>
+                          <div className="video-custom-actions">
+                            <button
+                              type="button"
+                              className="btn-video-fs-icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleFullscreen();
+                              }}
+                              title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen (f)'}
+                            >
+                              {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                            </button>
                           </div>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
-                </section>
 
-                {/* Actions Row Below Player (Channel, Like, Artist Link) */}
+                  {/* Song Mode: Signature Organic Floral Scalloped Artwork Mask */}
+                  {playerMode === 'song' && currentTrack && (
+                    <div
+                      className="song-stage-viewport"
+                      onDoubleClick={handleToggleFullscreen}
+                      title="Double-click to toggle full screen"
+                    >
+                      {/* Top Header with Non-Clickable Song Name + Full Screen Toggle */}
+                      <div className={`song-fs-overlay-header ${isFullscreen && !isHudVisible ? 'hud-faded' : ''}`}>
+                        <div className="song-fs-title-block">
+                          <span className="song-fs-header-title">{currentTrack.title}</span>
+                          <span className="song-fs-header-artist">{currentTrack.artist}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-song-fs-exit"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleFullscreen();
+                          }}
+                          title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen (f)'}
+                        >
+                          {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                        </button>
+                      </div>
+                      <div className="song-scalloped-artwork-wrap">
+                        <div className="song-scalloped-aura" />
+                        <img
+                          src={currentTrack.cover}
+                          alt={currentTrack.title}
+                          className="song-scalloped-img"
+                          style={{ clipPath: 'url(#flower-mask-player)' }}
+                        />
+                      </div>
+                      <div className="song-stage-meta">
+                        <h2 className="song-stage-title">{currentTrack.title}</h2>
+                        <span className="song-stage-artist">{currentTrack.artist}</span>
+                        <div className="song-stage-tags">
+                          <span className="song-stage-chip">{currentTrack.album || 'Hi-Fi Master'}</span>
+                          <span className="song-stage-chip">LOSSLESS AUDIO</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Actions Row Below Player (Channel, Like, Artist Link) */}
+              {currentTrack && (
                 <div className="now-playing-actions-row">
                   <div className="np-channel-block">
                     <div
@@ -1708,8 +1993,8 @@ export function MainAppView({ userProfile, onSignOut }) {
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* ==============================================================
@@ -2229,8 +2514,10 @@ export function MainAppView({ userProfile, onSignOut }) {
                         ref={isCurrentlyPlaying ? activeQueueItemRef : null}
                         className={`dock-queue-item ${isCurrentlyPlaying ? 'active-playing' : ''}`}
                         onClick={() => {
+                          userRequestedPauseRef.current = false;
                           markTransitioning();
-                          if (currentTrack?.videoId === track.videoId && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+                          const resolvedVid = track.videoId || track.youtubeId || (typeof track.id === 'string' && track.id.startsWith('yt-') ? track.id.replace('yt-', '') : track.id);
+                          if (currentTrack?.videoId === resolvedVid && ytPlayer && typeof ytPlayer.seekTo === 'function') {
                             setCurrentTime(0);
                             try {
                               ytPlayer.seekTo(0, true);
@@ -2241,10 +2528,20 @@ export function MainAppView({ userProfile, onSignOut }) {
                           }
                           setQueueIndex(qIdx);
                           queueIndexRef.current = qIdx;
-                          setCurrentTrack(track);
-                          currentTrackRef.current = track;
+                          const normTrack = { ...track, videoId: resolvedVid };
+                          setCurrentTrack(normTrack);
+                          currentTrackRef.current = normTrack;
+                          if (normTrack.duration && Number(normTrack.duration) > 0) {
+                            setDuration(Number(normTrack.duration));
+                          }
                           setIsPlaying(true);
                           setCurrentTime(0);
+                          if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && normTrack.videoId) {
+                            try {
+                              ytPlayer.loadVideoById(normTrack.videoId, 0);
+                              ytPlayer.playVideo();
+                            } catch (err) {}
+                          }
                         }}
                       >
                         <div className="queue-thumb-wrap">
@@ -2323,12 +2620,14 @@ export function MainAppView({ userProfile, onSignOut }) {
           ==================================================================== */}
       {hasPlayedTrack && currentTrack && (
         <footer
-          className="desktop-player-bar-dock"
+          className={`desktop-player-bar-dock ${isFullscreen ? 'dock-fullscreen' : ''} ${isFullscreen && !isHudVisible ? 'hud-faded' : ''}`}
           onClick={(e) => {
+            if (isFullscreen) return;
+            if (isScrubbingRef.current || justScrubbedRef.current) return;
             if (e.target.closest('button, input, a, .player-dock-progress-edge, .scrub-track-wrapper')) return;
             handleTogglePlayerExpand();
           }}
-          title={activeNav === 'now-playing' ? 'Click to minimize player view' : 'Click to expand player view'}
+          title={activeNav === 'now-playing' ? (isFullscreen ? '' : 'Click to minimize player view') : 'Click to expand player view'}
         >
           {/* Top-Edge YouTube-Style Scrub Progress Bar with Dot Handle & Drag Pause */}
           <div
@@ -2336,6 +2635,9 @@ export function MainAppView({ userProfile, onSignOut }) {
             className={`player-dock-progress-edge ${isScrubbing ? 'is-scrubbing' : ''}`}
             onMouseDown={handleScrubStart}
             onTouchStart={handleScrubStart}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
             title={duration > 0 ? `${formatTime(isScrubbing ? Math.floor(scrubFraction * duration) : currentTime)} / ${formatTime(duration)}` : 'Seek'}
           >
             <div
@@ -2426,7 +2728,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                 <button
                   type="button"
                   className="btn-master-play"
-                  onClick={() => setIsPlaying(!isPlaying)}
+                  onClick={handleTogglePlay}
                   title={isPlaying ? 'Pause' : 'Play'}
                 >
                   {isPlaying ? <Pause size={18} fill="#FFF" /> : <Play size={18} fill="#FFF" style={{ marginLeft: 2 }} />}
@@ -2486,6 +2788,18 @@ export function MainAppView({ userProfile, onSignOut }) {
                 title="Toggle Up Next Queue"
               >
                 <ListMusic size={19} />
+              </button>
+
+              <button
+                type="button"
+                className={`btn-player-side-icon ${isFullscreen ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleFullscreen();
+                }}
+                title={isFullscreen ? 'Exit Full Screen (Esc)' : 'Full Screen (f)'}
+              >
+                {isFullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
               </button>
             </div>
           </div>
