@@ -397,27 +397,30 @@ export function MainAppView({ userProfile, onSignOut }) {
   };
 
   // Spotify-Style Session Persistence (Track, Queue, Exact Position, Mode)
-  const persistPlaybackSession = (customCurTime = null) => {
-    if (!currentTrackRef.current) return;
+  const persistPlaybackSession = (customCurTime = null, trackOverride = null, queueOverride = null, indexOverride = null) => {
+    const track = trackOverride || currentTrackRef.current;
+    if (!track) return;
     const timeToSave = customCurTime !== null ? customCurTime : (currentTimeRef.current || 0);
+    const qToSave = queueOverride || queueRef.current || [];
+    const idxToSave = (indexOverride !== null && indexOverride !== undefined) ? indexOverride : (queueIndexRef.current || 0);
     playerStore.savePlaybackSession({
-      currentTrack: currentTrackRef.current,
+      currentTrack: track,
       currentTime: timeToSave,
       duration: durationRef.current || duration || 0,
-      queue: queueRef.current || [],
-      queueIndex: queueIndexRef.current || 0,
+      queue: qToSave,
+      queueIndex: idxToSave,
       playerMode,
       savedAt: Date.now()
     });
   };
 
-  // Debounced session auto-save on state transitions
+  // Immediate and debounced session auto-save on state transitions
   useEffect(() => {
     if (!currentTrack) return;
     if (saveSessionDebounceRef.current) clearTimeout(saveSessionDebounceRef.current);
     saveSessionDebounceRef.current = setTimeout(() => {
       persistPlaybackSession();
-    }, 1000);
+    }, 300);
   }, [currentTrack, queue, queueIndex, playerMode, duration]);
 
   // Window unload persistence (in case app closes suddenly / window closed)
@@ -764,13 +767,20 @@ export function MainAppView({ userProfile, onSignOut }) {
     setIsPlaying(true);
     setCurrentTime(0);
 
+    const initialQ = (customQueue && Array.isArray(customQueue) && customQueue.length > 0)
+      ? customQueue
+      : [normalizedTrack];
+    const initialTargetIdx = (customQueue && Array.isArray(customQueue) && customQueue.length > 0)
+      ? Math.max(0, customQueue.findIndex((t) => (t.videoId && t.videoId === normalizedTrack.videoId) || t.id === normalizedTrack.id))
+      : 0;
+
+    persistPlaybackSession(0, normalizedTrack, initialQ, initialTargetIdx);
+
     if (customQueue && Array.isArray(customQueue) && customQueue.length > 0) {
       setQueue(customQueue);
       queueRef.current = customQueue;
-      const idx = customQueue.findIndex((t) => (t.videoId && t.videoId === normalizedTrack.videoId) || t.id === normalizedTrack.id);
-      const targetIdx = idx >= 0 ? idx : 0;
-      setQueueIndex(targetIdx);
-      queueIndexRef.current = targetIdx;
+      setQueueIndex(initialTargetIdx);
+      queueIndexRef.current = initialTargetIdx;
 
       // If the playlist or queue is short (<= 8 tracks), automatically fetch YouTube recommendations to append
       if (customQueue.length <= 8 && normalizedTrack.videoId) {
@@ -781,6 +791,7 @@ export function MainAppView({ userProfile, onSignOut }) {
               const newOnes = extra.filter((t) => !existingIds.has(t.videoId || t.id));
               const merged = newOnes.length > 0 ? [...prevQueue, ...newOnes] : prevQueue;
               queueRef.current = merged;
+              persistPlaybackSession(null, normalizedTrack, merged, initialTargetIdx);
               return merged;
             });
           }
@@ -797,6 +808,7 @@ export function MainAppView({ userProfile, onSignOut }) {
         if (fullRadio && fullRadio.length > 0) {
           setQueue(fullRadio);
           queueRef.current = fullRadio;
+          persistPlaybackSession(0, normalizedTrack, fullRadio, 0);
         }
       } catch (err) {
         console.warn('Radio queue fetch error:', err);
@@ -911,6 +923,7 @@ export function MainAppView({ userProfile, onSignOut }) {
               }
               setIsPlaying(true);
               setCurrentTime(0);
+              persistPlaybackSession(0, nextTrk, updatedQueue, nextIdx);
               if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && nextTrk.videoId) {
                 try {
                   ytPlayer.loadVideoById(nextTrk.videoId, 0);
@@ -939,6 +952,7 @@ export function MainAppView({ userProfile, onSignOut }) {
     }
     setIsPlaying(true);
     setCurrentTime(0);
+    persistPlaybackSession(0, nextTrk, q, nextIdx);
     if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && nextTrk.videoId) {
       try {
         ytPlayer.loadVideoById(nextTrk.videoId, 0);
@@ -975,6 +989,7 @@ export function MainAppView({ userProfile, onSignOut }) {
     }
     setIsPlaying(true);
     setCurrentTime(0);
+    persistPlaybackSession(0, prevTrk, q, prevIdx);
     if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && prevTrk.videoId) {
       try {
         ytPlayer.loadVideoById(prevTrk.videoId, 0);
@@ -2005,9 +2020,9 @@ export function MainAppView({ userProfile, onSignOut }) {
                       onTimeUpdate={(cur, dur) => {
                         if (!isScrubbingRef.current && !isSeekingRef.current) {
                           setCurrentTime(cur);
-                          // Periodic session persistence every 3 seconds while playing
+                          // Periodic session persistence every 2 seconds while playing
                           const now = Date.now();
-                          if (now - lastSessionSaveTimeRef.current > 3000) {
+                          if (now - lastSessionSaveTimeRef.current > 2000) {
                             lastSessionSaveTimeRef.current = now;
                             persistPlaybackSession(cur);
                           }
@@ -2684,6 +2699,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                           }
                           setIsPlaying(true);
                           setCurrentTime(0);
+                          persistPlaybackSession(0, normTrack, queue, qIdx);
                           if (ytPlayer && typeof ytPlayer.loadVideoById === 'function' && normTrack.videoId) {
                             try {
                               ytPlayer.loadVideoById(normTrack.videoId, 0);

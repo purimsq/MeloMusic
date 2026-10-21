@@ -45,12 +45,8 @@ class AuthService {
           this.notifyListeners(profile);
         } else {
           this.currentUser = null;
-          // Only clear if not in guest/local session
-          if (this.userProfile && !this.userProfile.isGuest) {
-            this.userProfile = null;
-            this.setUserProfile(null);
-          }
-          this.notifyListeners(this.userProfile);
+          // Session remains permanently active locally until the user explicitly clicks Sign Out or uninstalls the app.
+          // Do not wipe this.userProfile or localStorage on startup when Firebase is initializing or user is null.
         }
       });
     } catch (e) {

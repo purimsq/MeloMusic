@@ -26,6 +26,8 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf'
 };
 
+const PREFERRED_PORT = 49721;
+
 function startLocalServer(distDir) {
   return new Promise((resolve) => {
     if (localServer) {
@@ -51,7 +53,18 @@ function startLocalServer(distDir) {
       fs.createReadStream(filePath).pipe(res);
     });
 
-    localServer.listen(0, 'localhost', () => {
+    localServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.warn(`Port ${PREFERRED_PORT} in use, allocating ephemeral port fallback.`);
+        localServer.listen(0, 'localhost', () => {
+          resolve(localServer.address().port);
+        });
+      } else {
+        console.error('Local server error:', err);
+      }
+    });
+
+    localServer.listen(PREFERRED_PORT, 'localhost', () => {
       const port = localServer.address().port;
       resolve(port);
     });

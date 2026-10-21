@@ -70,23 +70,27 @@ export function YouTubePlayerHost({
                     if (isMuted) event.target.mute();
                     else event.target.unMute();
                   } catch {}
-                  if (onReadyRef.current) onReadyRef.current(event.target);
-
-                  // Immediately load and play the active video when player is ready
-                  if (videoId) {
-                    currentLoadedVideoIdRef.current = videoId;
-                    try {
-                      event.target.loadVideoById(videoId, 0);
-                      if (isPlaying) {
-                        event.target.playVideo();
+                  if (onReadyRef.current) {
+                    onReadyRef.current(event.target);
+                  } else {
+                    // Fallback when no custom onReady handler is registered
+                    if (videoId) {
+                      currentLoadedVideoIdRef.current = videoId;
+                      try {
+                        if (isPlaying) {
+                          event.target.loadVideoById(videoId, 0);
+                          event.target.playVideo();
+                        } else {
+                          event.target.cueVideoById(videoId, 0);
+                        }
+                      } catch (err) {
+                        console.warn('onReady video load error:', err);
                       }
-                    } catch (err) {
-                      console.warn('onReady video load error:', err);
+                    } else if (isPlaying) {
+                      try {
+                        event.target.playVideo();
+                      } catch {}
                     }
-                  } else if (isPlaying) {
-                    try {
-                      event.target.playVideo();
-                    } catch {}
                   }
                 },
                 onStateChange: (event) => {
