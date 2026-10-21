@@ -36,12 +36,14 @@ import {
   Film,
   Trash2,
   Maximize2,
-  Minimize2
+  Minimize2,
+  RefreshCw
 } from 'lucide-react';
 import { CURATED_ARTISTS } from '../data/curatedArtists';
 import { authService } from '../services/authService';
 import { youtubeMusicService } from '../services/youtubeMusicService';
 import { playerStore } from '../services/playerStore';
+import { updateService } from '../services/updateService';
 import { EqualizerModal } from './EqualizerModal';
 import { YouTubePlayerHost } from './YouTubePlayerHost';
 
@@ -80,21 +82,29 @@ export function MainAppView({ userProfile, onSignOut }) {
   const [isEqualizerOpen, setIsEqualizerOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
+  // Saved Session: Restore track, queue, position on app launch (Spotify behavior)
+  const savedSession = useRef(playerStore.getPlaybackSession()).current;
+  const isRestoredSessionRef = useRef(!!savedSession?.currentTrack);
+  const saveSessionDebounceRef = useRef(null);
+
   // Playback & YouTube Player State
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [hasPlayedTrack, setHasPlayedTrack] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [currentTrack, setCurrentTrack] = useState(savedSession?.currentTrack || null);
+  const [hasPlayedTrack, setHasPlayedTrack] = useState(!!savedSession?.currentTrack);
+  const [isPlaying, setIsPlaying] = useState(false); // ALWAYS starts paused on restore
+  const [currentTime, setCurrentTime] = useState(savedSession?.currentTime || 0);
+  const [duration, setDuration] = useState(savedSession?.duration || 0);
   const [volume, setVolume] = useState(playerStore.getSettings().volume ?? 0.85);
   const [isMuted, setIsMuted] = useState(playerStore.getSettings().isMuted ?? false);
-  const [playerMode, setPlayerMode] = useState(playerStore.getSettings().playerMode || 'song'); // 'song' by default | 'video'
+  const [playerMode, setPlayerMode] = useState(savedSession?.playerMode || playerStore.getSettings().playerMode || 'song'); // 'song' by default | 'video'
   const [isSwitchingMode, setIsSwitchingMode] = useState(false);
   const [repeatMode, setRepeatMode] = useState(playerStore.getSettings().repeatMode || 'all'); // 'off' | 'all' | 'one'
   const [isShuffle, setIsShuffle] = useState(playerStore.getSettings().isShuffle || false);
-  const [queue, setQueue] = useState([]);
-  const [queueIndex, setQueueIndex] = useState(0);
+  const [queue, setQueue] = useState(savedSession?.queue || []);
+  const [queueIndex, setQueueIndex] = useState(savedSession?.queueIndex || 0);
   const [ytPlayer, setYtPlayer] = useState(null);
+
+  // Auto-Update State
+  const [updateInfo, setUpdateInfo] = useState(() => updateService.getState());
 
   // Live YouTube Feeds
   const [homeFeed, setHomeFeed] = useState({ quickPicks: [], topHits: [], recommendedVideos: [] });
@@ -183,6 +193,14 @@ export function MainAppView({ userProfile, onSignOut }) {
   const currentTrackRef = useRef(currentTrack);
   currentTrackRef.current = currentTrack;
 
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+
+  const lastSessionSaveTimeRef = useRef(0);
+
   // Refs for YouTube Music style queue auto-scrolling
   const rightDockRef = useRef(null);
   const activeQueueItemRef = useRef(null);
@@ -222,7 +240,8 @@ export function MainAppView({ userProfile, onSignOut }) {
   };
 
   // Explicit user-requested pause tracker: avoids getting trapped when YouTube fires state 2 while buffering or changing tracks
-  const userRequestedPauseRef = useRef(false);
+  // If we restored a saved session, initialize as true so the cued track stays paused until user clicks play
+  const userRequestedPauseRef = useRef(!!savedSession?.currentTrack);
 
   // Fullscreen HUD Auto-Hide Idle Timer (YouTube behavior)
   const resetHudTimer = () => {
@@ -338,6 +357,64 @@ export function MainAppView({ userProfile, onSignOut }) {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => setToastMessage(''), 3200);
   };
+
+  // Update Service: Subscribe to update changes and perform silent background check on launch (Spotify behavior)
+  useEffect(() => {
+    const unsubscribe = updateService.subscribe((state) => {
+      setUpdateInfo(state);
+    });
+
+    // Check once in the background upon launch
+    updateService.checkOnLaunch((foundState) => {
+      showToast(`New update available (v${foundState.version}) • Click profile to update`);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Update Action Handler
+  const handleTriggerUpdate = () => {
+    if (updateInfo.hasUpdate) {
+      updateService.startDownloadAndInstall();
+    } else {
+      updateService.checkForUpdates(true).then((hasNew) => {
+        if (!hasNew) showToast('MUSE is up to date (v1.0.0)');
+      });
+    }
+  };
+
+  // Spotify-Style Session Persistence (Track, Queue, Exact Position, Mode)
+  const persistPlaybackSession = (customCurTime = null) => {
+    if (!currentTrackRef.current) return;
+    const timeToSave = customCurTime !== null ? customCurTime : (currentTimeRef.current || 0);
+    playerStore.savePlaybackSession({
+      currentTrack: currentTrackRef.current,
+      currentTime: timeToSave,
+      duration: durationRef.current || duration || 0,
+      queue: queueRef.current || [],
+      queueIndex: queueIndexRef.current || 0,
+      playerMode,
+      savedAt: Date.now()
+    });
+  };
+
+  // Debounced session auto-save on state transitions
+  useEffect(() => {
+    if (!currentTrack) return;
+    if (saveSessionDebounceRef.current) clearTimeout(saveSessionDebounceRef.current);
+    saveSessionDebounceRef.current = setTimeout(() => {
+      persistPlaybackSession();
+    }, 1000);
+  }, [currentTrack, queue, queueIndex, playerMode, duration]);
+
+  // Window unload persistence (in case app closes suddenly / window closed)
+  useEffect(() => {
+    const handleUnload = () => {
+      persistPlaybackSession();
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, []);
 
   // YouTube-style Scrubber calculations and drag listeners
   const calculateFraction = (clientX) => {
@@ -730,6 +807,7 @@ export function MainAppView({ userProfile, onSignOut }) {
     if (isPlaying) {
       userRequestedPauseRef.current = true;
       setIsPlaying(false);
+      persistPlaybackSession();
       if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
         try { ytPlayer.pauseVideo(); } catch {}
       }
@@ -1432,6 +1510,9 @@ export function MainAppView({ userProfile, onSignOut }) {
                       <span>{userName.charAt(0).toUpperCase()}</span>
                     )}
                   </div>
+                  {updateInfo.hasUpdate && (
+                    <span className="profile-update-badge-dot" title={`New update available (v${updateInfo.version})`} />
+                  )}
                 </div>
 
                 {isProfileMenuOpen && (
@@ -1449,19 +1530,48 @@ export function MainAppView({ userProfile, onSignOut }) {
                         <span className="popover-email">{userProfile?.email || 'listener@melo.app'}</span>
                       </div>
                     </div>
-                    <span className="popover-badge">MUSE Hi-Fi Cloud</span>
+                    <div className="popover-badge-row">
+                      <span className="popover-badge">MUSE Hi-Fi Cloud</span>
+                      <span className="popover-version-tag">v{updateInfo.currentVersion || '1.0.0'}</span>
+                    </div>
                     <div className="popover-divider" />
-                    <button
-                      type="button"
-                      className="btn-popover-logout"
-                      onClick={() => {
-                        setIsProfileMenuOpen(false);
-                        if (onSignOut) onSignOut();
-                      }}
-                    >
-                      <LogOut size={16} />
-                      <span>Sign Out</span>
-                    </button>
+                    <div className="popover-actions-list">
+                      <button
+                        type="button"
+                        className={`btn-popover-action btn-popover-update ${updateInfo.hasUpdate ? 'has-update-pending' : ''}`}
+                        onClick={handleTriggerUpdate}
+                        disabled={updateInfo.status === 'downloading'}
+                        title={updateInfo.hasUpdate ? `Update to v${updateInfo.version}` : 'Check for Updates'}
+                      >
+                        <RefreshCw size={15} className={`update-icon ${updateInfo.status === 'downloading' ? 'animate-spin' : ''}`} />
+                        <div className="update-btn-label-group">
+                          <span>
+                            {updateInfo.status === 'downloading'
+                              ? `Downloading ${updateInfo.progress}%`
+                              : updateInfo.status === 'ready'
+                              ? `Restart & Install (v${updateInfo.version})`
+                              : updateInfo.hasUpdate
+                              ? `Update Available (v${updateInfo.version})`
+                              : 'Check for Updates'}
+                          </span>
+                        </div>
+                        {updateInfo.hasUpdate && (
+                          <span className="green-pulse-indicator" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-popover-action btn-popover-logout"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          if (onSignOut) onSignOut();
+                        }}
+                        title="Sign Out"
+                      >
+                        <LogOut size={15} />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1828,7 +1938,17 @@ export function MainAppView({ userProfile, onSignOut }) {
                       playerMode={playerMode}
                       onReady={(player) => {
                         setYtPlayer(player);
-                        if (currentTrackRef.current?.videoId) {
+                        if (isRestoredSessionRef.current && currentTrackRef.current?.videoId) {
+                          try {
+                            const startSec = savedSession?.currentTime || 0;
+                            player.cueVideoById({
+                              videoId: currentTrackRef.current.videoId,
+                              startSeconds: startSec
+                            });
+                            player.pauseVideo();
+                          } catch {}
+                          isRestoredSessionRef.current = false;
+                        } else if (currentTrackRef.current?.videoId) {
                           try {
                             player.loadVideoById(currentTrackRef.current.videoId, 0);
                             player.playVideo();
@@ -1863,6 +1983,12 @@ export function MainAppView({ userProfile, onSignOut }) {
                       onTimeUpdate={(cur, dur) => {
                         if (!isScrubbingRef.current && !isSeekingRef.current) {
                           setCurrentTime(cur);
+                          // Periodic session persistence every 3 seconds while playing
+                          const now = Date.now();
+                          if (now - lastSessionSaveTimeRef.current > 3000) {
+                            lastSessionSaveTimeRef.current = now;
+                            persistPlaybackSession(cur);
+                          }
                         }
                         if (dur > 0 && dur !== duration) setDuration(dur);
                       }}

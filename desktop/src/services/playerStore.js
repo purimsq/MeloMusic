@@ -205,6 +205,16 @@ class PlayerStore {
     this.save(STORAGE_KEYS.SETTINGS, this.settings);
     this.notify('settingsChange', this.settings);
   }
+
+  // PLAYBACK SESSION PERSISTENCE (Spotify-style restore on launch / after sudden exit)
+  getPlaybackSession() {
+    return this.load('melo_desktop_playback_session', null);
+  }
+
+  savePlaybackSession(session) {
+    if (!session || !session.currentTrack) return;
+    this.save('melo_desktop_playback_session', session);
+  }
 }
 
 export const playerStore = new PlayerStore();

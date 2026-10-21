@@ -2566,6 +2566,243 @@ html, body {
   object-fit: cover;
 }
 
+/* Header User Profile & Popover */
+.header-user-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.header-user-profile {
+  position: relative;
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 2px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.header-user-profile:hover {
+  transform: scale(1.06);
+}
+
+/* Spotify-style Green Notification Dot on User Avatar */
+.profile-update-badge-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10B981;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.9);
+  animation: updatePulseGlow 1.8s ease-in-out infinite;
+  z-index: 10;
+  pointer-events: none;
+}
+
+@keyframes updatePulseGlow {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* User Account Profile Popover Card */
+.header-user-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 290px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.04);
+  padding: 18px;
+  z-index: 9999;
+  animation: popoverFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.popover-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.popover-avatar-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #18181B;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.popover-avatar-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.popover-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.popover-name {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: #18181B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popover-email {
+  font-size: 11.5px;
+  color: #71717A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.popover-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.popover-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #27272A;
+}
+
+.popover-version-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #A1A1AA;
+}
+
+.popover-divider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 6px 0 12px;
+}
+
+.popover-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn-popover-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #27272A;
+  transition: all 0.18s ease;
+  text-align: left;
+}
+
+.btn-popover-action:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #09090B;
+}
+
+.update-btn-label-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+/* Green dot pulse indicator inside popover button */
+.green-pulse-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+  animation: updatePulseGlow 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.btn-popover-update.has-update-pending {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  font-weight: 700;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.btn-popover-update.has-update-pending:hover {
+  background: rgba(16, 185, 129, 0.22);
+  color: #065F46;
+  transform: translateY(-1px);
+}
+
+.btn-popover-logout:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #DC2626;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* --------------------------------------------------------------------------
    PAGE VIEW 1: HOME PAGE
    -------------------------------------------------------------------------- */
@@ -5934,6 +6171,14 @@ html, body {
   white-space: nowrap;
 }
 
+.popover-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
 .popover-badge {
   display: inline-flex;
   align-items: center;
@@ -5944,7 +6189,16 @@ html, body {
   font-size: 10.5px;
   font-weight: 700;
   color: var(--text-secondary);
-  align-self: flex-start;
+}
+
+.popover-version-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.5px;
 }
 
 .popover-divider {
@@ -5953,28 +6207,64 @@ html, body {
   background: rgba(0, 0, 0, 0.06);
 }
 
-.btn-popover-logout {
+.popover-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.btn-popover-action {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 16px;
+  padding: 10px 14px;
   border-radius: 12px;
-  background: rgba(229, 57, 53, 0.08);
-  border: 1px solid rgba(229, 57, 53, 0.2);
-  color: #E53935;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   width: 100%;
+  border: 1px solid transparent;
   justify-content: center;
+}
+
+.btn-popover-update {
+  background: var(--accent-black);
+  color: #FFFFFF;
+  border-color: var(--accent-black);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.btn-popover-update:hover {
+  background: #282828;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+
+.btn-popover-update:active {
+  transform: translateY(0);
+}
+
+.btn-popover-update .update-icon {
+  transition: transform 0.4s ease;
+}
+
+.btn-popover-update:hover .update-icon {
+  transform: rotate(90deg);
+}
+
+.btn-popover-logout {
+  background: rgba(229, 57, 53, 0.08);
+  border: 1px solid rgba(229, 57, 53, 0.18);
+  color: #E53935;
 }
 
 .btn-popover-logout:hover {
   background: #E53935;
   color: #FFFFFF;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(229, 57, 53, 0.3);
+  box-shadow: 0 4px 14px rgba(229, 57, 53, 0.25);
 }
 
 /* ==========================================================================
