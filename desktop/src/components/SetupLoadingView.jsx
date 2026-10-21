@@ -5,13 +5,22 @@ export function SetupLoadingView({ selectedArtistIds = [], onComplete }) {
   const [percent, setPercent] = useState(0);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Map selected IDs to artist objects (with fallback if searched artist)
-  const selectedArtists = selectedArtistIds.map((id, index) => {
+  // Map selected IDs or artist objects to structured artist display items
+  const selectedArtists = selectedArtistIds.map((item, index) => {
+    if (typeof item === 'object' && item !== null) {
+      return {
+        id: item.id || `artist-${index}`,
+        name: item.name || 'Artist',
+        photo: item.photo || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80',
+        genre: item.genre || 'World Artist'
+      };
+    }
+    const id = String(item || '');
     const found = CURATED_ARTISTS.find((a) => a.id === id);
     if (found) return found;
     return {
       id,
-      name: id.replace('artist-', '').replace(/-/g, ' ').toUpperCase(),
+      name: id ? id.replace('artist-', '').replace(/-/g, ' ').toUpperCase() : `Artist ${index + 1}`,
       photo: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80',
       genre: 'World Artist'
     };

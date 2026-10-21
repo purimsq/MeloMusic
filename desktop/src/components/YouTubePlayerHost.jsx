@@ -59,7 +59,10 @@ export function YouTubePlayerHost({
                 playsinline: 1,
                 modestbranding: 1,
                 iv_load_policy: 3,
-                cc_load_policy: 0
+                cc_load_policy: 0,
+                origin: typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:')
+                  ? window.location.origin
+                  : 'https://www.youtube.com'
               },
               events: {
                 onReady: (event) => {

@@ -18,7 +18,7 @@ export class YouTubeMusicService {
   }
 
   /**
-   * Helper: safe fetch through local Vite dev proxy to YouTube Music InnerTube
+   * Helper: safe fetch through Electron IPC bridge or local Vite proxy to YouTube Music InnerTube
    */
   async postYTMusic(endpoint, body) {
     const payload = {
@@ -26,6 +26,22 @@ export class YouTubeMusicService {
       ...body
     };
 
+    // 1. Electron IPC Bridge (works standalone in packaged .exe with zero CORS)
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.fetchInnerTube === 'function') {
+      try {
+        const result = await window.electronAPI.fetchInnerTube(endpoint, payload);
+        if (result && !result.error) {
+          return result;
+        }
+        if (result?.error) {
+          console.warn(`[InnerTube IPC] API error on ${endpoint}:`, result.error);
+        }
+      } catch (err) {
+        console.warn(`[InnerTube IPC] IPC error on ${endpoint}:`, err);
+      }
+    }
+
+    // 2. Local Vite dev server proxy (used during web browser / Vite dev mode)
     const baseUrl = typeof window !== 'undefined' ? '' : 'http://localhost:5174';
 
     try {
@@ -44,7 +60,6 @@ export class YouTubeMusicService {
       return await res.json();
     } catch (err) {
       console.warn(`Error querying /yt-music/${endpoint}:`, err);
-      // Secondary fallback directly to backend resolver if available
       return null;
     }
   }
@@ -445,19 +460,31 @@ export class YouTubeMusicService {
   async getHomeFeed(selectedArtists = []) {
     const artistNames = selectedArtists.map((a) => (typeof a === 'string' ? a : a.name)).filter(Boolean);
     const queryArtist = artistNames.length > 0 ? artistNames[0] : 'Drake';
-    const secondArtist = artistNames.length > 1 ? artistNames[1] : 'The Weeknd';
+    const secondArtist = artistNames.length > 1 ? artistNames[1] : (artistNames[0] || 'The Weeknd');
+    const thirdArtist = artistNames.length > 2 ? artistNames[2] : (artistNames[0] || 'Travis Scott');
 
     // Parallel fetch real songs from YouTube Music
-    const [quickPicks, topHits, videos] = await Promise.all([
+    let [quickPicks, topHits, videos] = await Promise.all([
       this.search(`${queryArtist} popular hits`),
       this.search(`${secondArtist} top tracks official`),
-      this.search(`${queryArtist} official music video`)
+      this.search(`${thirdArtist} official music video`)
     ]);
 
+    // If initial query returned empty, query general trending music
+    if (!quickPicks || quickPicks.length === 0) {
+      quickPicks = await this.search('top global billboard hits');
+    }
+    if (!topHits || topHits.length === 0) {
+      topHits = await this.search('trending music hits official');
+    }
+    if (!videos || videos.length === 0) {
+      videos = await this.search('trending official music videos');
+    }
+
     return {
-      quickPicks: quickPicks.slice(0, 12),
-      topHits: topHits.slice(0, 12),
-      recommendedVideos: videos.slice(0, 8)
+      quickPicks: (quickPicks || []).slice(0, 15),
+      topHits: (topHits || []).slice(0, 15),
+      recommendedVideos: (videos || []).slice(0, 10)
     };
   }
 

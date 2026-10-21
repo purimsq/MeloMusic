@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, UserCheck, Sparkles, X, Disc, Sliders, Music, WifiOff } from 'lucide-react';
 import { authService } from '../services/authService';
 import { networkService } from '../services/networkService';
+import logoBadgeImg from '../assets/logo-badge.png';
 
 export function OnboardingAuthView({ onAuthSuccess }) {
   const [mode, setMode] = useState('signup'); // 'signup' | 'login' | 'otp'
@@ -14,7 +15,6 @@ export function OnboardingAuthView({ onAuthSuccess }) {
   const [errorMessage, setErrorMessage] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
   const [fallbackMode, setFallbackMode] = useState(null); // 'guest' | 'no-account'
-  const [devCodeHint, setDevCodeHint] = useState('');
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => networkService.isOnline);
 
@@ -92,9 +92,6 @@ export function OnboardingAuthView({ onAuthSuccess }) {
         const res = await authService.initiateSignUpWithOtp(name, email, password);
         setIsLoading(false);
         setMode('otp');
-        if (res.devCode) {
-          setDevCodeHint(res.devCode);
-        }
       } catch (err) {
         setIsLoading(false);
         setErrorMessage(err.message || 'Failed to dispatch verification code.');
@@ -229,7 +226,7 @@ export function OnboardingAuthView({ onAuthSuccess }) {
 
         <div className="brand-logo-desktop" title="MUSE PC">
           <div className="brand-logo-emblem">
-            <img src="/icons/logo-badge.png" alt="MUSE" className="brand-logo-img" />
+            <img src={logoBadgeImg} alt="MUSE" className="brand-logo-img" />
           </div>
           <div className="brand-logo-text">
             muse<span className="brand-logo-dot">.</span>
@@ -430,14 +427,6 @@ export function OnboardingAuthView({ onAuthSuccess }) {
                   <UserCheck size={15} />
                   <span>Create Account with {email}</span>
                 </button>
-              </div>
-            )}
-
-            {/* Dev Mode Code Helper (helps testing without real email access) */}
-            {devCodeHint && mode === 'otp' && (
-              <div className="auth-dev-hint">
-                <ShieldCheck size={16} />
-                <span>Dev Preview Code: <strong>{devCodeHint}</strong></span>
               </div>
             )}
 
@@ -678,7 +667,7 @@ export function OnboardingAuthView({ onAuthSuccess }) {
               <div className="about-brand-wrap">
                 <div className="brand-logo-desktop">
                   <div className="brand-logo-emblem">
-                    <img src="/icons/logo-badge.png" alt="MUSE" className="brand-logo-img" />
+                    <img src={logoBadgeImg} alt="MUSE" className="brand-logo-img" />
                   </div>
                   <div className="brand-logo-text">
                     muse<span className="brand-logo-dot">.</span>

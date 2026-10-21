@@ -24,5 +24,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   setTitleBarOverlay: (options) => {
     ipcRenderer.send('window:set-titlebar-overlay', options);
-  }
+  },
+  fetchInnerTube: (endpoint, payload) => ipcRenderer.invoke('yt:innertube', { endpoint, payload })
 });

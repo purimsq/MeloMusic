@@ -48,6 +48,7 @@ import { updateService } from '../services/updateService';
 import { networkService } from '../services/networkService';
 import { EqualizerModal } from './EqualizerModal';
 import { YouTubePlayerHost } from './YouTubePlayerHost';
+import logoBadgeImg from '../assets/logo-badge.png';
 
 function YoutubeIcon({ size = 20, className = '' }) {
   return (
@@ -1143,7 +1144,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                   title="MUSE PC Home"
                 >
                   <div className="brand-logo-emblem">
-                    <img src="/icons/logo-badge.png" alt="MUSE" className="brand-logo-img" />
+                    <img src={logoBadgeImg} alt="MUSE" className="brand-logo-img" />
                   </div>
                   <div className="brand-logo-text">
                     muse<span className="brand-logo-dot">.</span>
