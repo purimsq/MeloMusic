@@ -4018,4 +4018,142 @@ body:has(.playlist-popup-backdrop.open) #floating-bottom-nav,
   background: rgba(29, 185, 84, 0.14);
 }
 
+/* ==========================================================================
+   Desktop Visitor Download Companion Card
+   ========================================================================== */
+
+.desktop-download-companion {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  #app {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 48px !important;
+    background: #E5E5E3 !important;
+  }
+
+  .desktop-download-companion {
+    display: block;
+    max-width: 360px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-radius: 28px;
+    padding: 32px 28px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    animation: fadeIn 0.4s ease;
+  }
+
+  .desktop-card-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .desktop-card-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .desktop-badge-img {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+  }
+
+  .desktop-brand-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: #121212;
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+
+  .desktop-brand-dot {
+    color: #121212;
+    font-weight: 900;
+  }
+
+  .desktop-brand-tag {
+    background: rgba(0, 0, 0, 0.07);
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #555555;
+    margin-left: 4px;
+  }
+
+  .desktop-card-heading {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #121212;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .desktop-card-sub {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #666666;
+    margin: 0;
+  }
+
+  .desktop-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+  }
+
+  .btn-desktop-download-exe {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 13px 20px;
+    border-radius: 999px;
+    background: #121212;
+    color: #FFFFFF !important;
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 700;
+    transition: all 0.22s ease;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-desktop-download-exe:hover {
+    background: #282828;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .btn-desktop-dismiss {
+    background: transparent;
+    border: none;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #777777;
+    cursor: pointer;
+    padding: 6px;
+    transition: color 0.2s ease;
+  }
+
+  .btn-desktop-dismiss:hover {
+    color: #121212;
+  }
+}
+
+
 

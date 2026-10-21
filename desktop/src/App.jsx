@@ -7,15 +7,25 @@ import { MainAppView } from './components/MainAppView';
 import { authService } from './services/authService';
 
 export function App() {
-  const [currentView, setCurrentView] = useState('main'); // default to 'main' for immediate preview of the requested desktop UI, with quick switcher
+  const initialProfile = authService.getUserProfile();
+  const [userProfile, setUserProfile] = useState(initialProfile);
+  // Real user flow: If already logged in, enter 'main'. If first-time install / not logged in, land on 'auth' (Sign Up).
+  const [currentView, setCurrentView] = useState(() => {
+    return initialProfile && initialProfile.isLoggedIn ? 'main' : 'auth';
+  });
   const [selectedArtists, setSelectedArtists] = useState([]);
-  const [userProfile, setUserProfile] = useState(() => authService.getUserProfile());
 
-  // Real-time session listener ("webhook") that immediately senses Google or Email login events
+  // Real-time session listener that immediately senses login / logout events
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+      document.body.classList.add('is-electron');
+    }
     const unsubscribe = authService.subscribe((profile) => {
       if (profile && profile.isLoggedIn) {
         setUserProfile(profile);
+      } else if (!profile) {
+        setUserProfile(null);
+        setCurrentView('auth');
       }
     });
     return () => unsubscribe();
@@ -23,11 +33,12 @@ export function App() {
 
   const handleAuthSuccess = (profile) => {
     setUserProfile(profile);
-    setCurrentView('artist-select');
-  };
-
-  const handleSkipToArtists = () => {
-    setCurrentView('artist-select');
+    // If user already has favorite artists, enter main. If new signup, proceed to taste onboarding.
+    if (profile?.favoriteArtists && profile.favoriteArtists.length > 0) {
+      setCurrentView('main');
+    } else {
+      setCurrentView('artist-select');
+    }
   };
 
   const handleBackToAuth = () => {
@@ -47,6 +58,7 @@ export function App() {
 
   const handleSignOut = () => {
     authService.signOut();
+    setUserProfile(null);
     setCurrentView('auth');
   };
 
@@ -55,44 +67,11 @@ export function App() {
       {/* Global Ambient 3D Sculpted Ceramic Clouds in Background */}
       <AmbientClouds />
 
-      {/* Development Quick-Switch Bar (discreet, top floating badge) */}
-      <div className="dev-view-switcher">
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'main' ? 'active' : ''}`}
-          onClick={() => setCurrentView('main')}
-        >
-          App Player
-        </button>
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'auth' ? 'active' : ''}`}
-          onClick={() => setCurrentView('auth')}
-        >
-          Auth Screen
-        </button>
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'artist-select' ? 'active' : ''}`}
-          onClick={() => setCurrentView('artist-select')}
-        >
-          Artist Taste
-        </button>
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'setup-loading' ? 'active' : ''}`}
-          onClick={() => setCurrentView('setup-loading')}
-        >
-          Curator Setup
-        </button>
-      </div>
-
       {/* Main View Layer */}
       <div className="view-layer-container">
         {currentView === 'auth' && (
           <OnboardingAuthView
             onAuthSuccess={handleAuthSuccess}
-            onSkipToArtists={handleSkipToArtists}
           />
         )}
 

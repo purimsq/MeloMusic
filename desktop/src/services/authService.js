@@ -9,6 +9,8 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { resolveApiUrl } from '../config/api.js';
+import { networkService } from './networkService.js';
 
 const STORAGE_KEYS = {
   USER_PROFILE: 'muse_pc_user_profile',
@@ -194,6 +196,10 @@ class AuthService {
    * Opens the small Google account selector modal rather than redirecting the whole window.
    */
   async signInWithGoogle() {
+    if (!networkService.isOnline) {
+      throw new Error('An active internet connection is required to sign in with Google. Please check your network.');
+    }
+
     if (!auth || !googleProvider) {
       throw new Error('Google Sign-In is unavailable without Firebase credentials.');
     }
@@ -232,6 +238,10 @@ class AuthService {
    * Step 1: Generates 6-digit OTP code and dispatches verification email via backend
    */
   async initiateSignUpWithOtp(name, email, password) {
+    if (!networkService.isOnline) {
+      throw new Error('An active internet connection is required to create an account. Please check your network.');
+    }
+
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const cleanEmail = email.trim().toLowerCase();
 
@@ -244,7 +254,7 @@ class AuthService {
     };
 
     try {
-      const res = await fetch('/api/send-otp', {
+      const res = await fetch(resolveApiUrl('/api/send-otp'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, code, name: this.pendingOtp.name })
@@ -266,6 +276,10 @@ class AuthService {
    * Step 2: Validates OTP and creates user in Firebase Auth
    */
   async verifyOtpAndCreateAccount(inputCode) {
+    if (!networkService.isOnline) {
+      throw new Error('An active internet connection is required to verify your account. Please check your network.');
+    }
+
     if (!this.pendingOtp) {
       throw new Error('No pending registration found. Please submit your details again.');
     }
@@ -321,6 +335,10 @@ class AuthService {
    * Log In with existing Email & Password
    */
   async logIn(email, password) {
+    if (!networkService.isOnline) {
+      throw new Error('An active internet connection is required to log in. Please check your network.');
+    }
+
     const cleanEmail = email.trim();
 
     try {

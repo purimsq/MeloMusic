@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Eye, EyeOff, AlertCircle, ArrowRight, CheckCircle2, ShieldCheck, UserCheck, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, UserCheck, Sparkles, X, Disc, Sliders, Music, WifiOff } from 'lucide-react';
 import { authService } from '../services/authService';
+import { networkService } from '../services/networkService';
 
-export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
+export function OnboardingAuthView({ onAuthSuccess }) {
   const [mode, setMode] = useState('signup'); // 'signup' | 'login' | 'otp'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -14,6 +15,32 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
   const [successNotice, setSuccessNotice] = useState('');
   const [fallbackMode, setFallbackMode] = useState(null); // 'guest' | 'no-account'
   const [devCodeHint, setDevCodeHint] = useState('');
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => networkService.isOnline);
+
+  // Real-time network monitor
+  useEffect(() => {
+    const unsubscribe = networkService.subscribe(({ isOnline: online }) => {
+      setIsOnline(online);
+      if (!online) {
+        setErrorMessage('No internet connection. Active internet is required to sign up or log in.');
+      } else {
+        setErrorMessage((prev) => prev?.includes('internet') ? '' : prev);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Close About modal on ESC key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isAboutModalOpen) {
+        setIsAboutModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAboutModalOpen]);
 
   // Password strength calculator
   const evaluatePasswordStrength = (pass) => {
@@ -40,6 +67,11 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
     e.preventDefault();
     setErrorMessage('');
     setFallbackMode(null);
+
+    if (!isOnline && !networkService.isOnline) {
+      setErrorMessage('Active internet connection required to sign up or log in. Please check your network.');
+      return;
+    }
 
     if (mode === 'signup') {
       if (!email || !isValidEmail(email)) {
@@ -119,6 +151,12 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
   const handleGoogleSignIn = async () => {
     setErrorMessage('');
     setFallbackMode(null);
+
+    if (!isOnline && !networkService.isOnline) {
+      setErrorMessage('Active internet connection required to sign in with Google. Please check your network.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const profile = await authService.signInWithGoogle();
@@ -158,6 +196,10 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
   // OTP Resend
   const handleResendOtp = async () => {
     if (!authService.pendingOtp) return;
+    if (!isOnline && !networkService.isOnline) {
+      setErrorMessage('Active internet connection required to resend verification code. Please check your network.');
+      return;
+    }
     try {
       const { name, email, password } = authService.pendingOtp;
       const res = await authService.initiateSignUpWithOtp(name, email, password);
@@ -171,29 +213,28 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
 
   return (
     <div className="desktop-onboarding-wrapper">
-      {/* Top Bar with Skip Button & Brand */}
+      {/* Top Bar with About Button, Brand & Version Meta */}
       <header className="desktop-top-header">
         <div className="header-left-actions">
-          {/* User Requested: Skip button top left */}
           <button 
             type="button" 
-            className="btn-skip-pill" 
-            onClick={onSkipToArtists}
-            title="Skip directly to the Artist Selection screen to preview taste onboarding"
+            className="btn-about-pill" 
+            onClick={() => setIsAboutModalOpen(true)}
+            title="Learn more about MUSE"
           >
-            <span>Skip to Artist Selection</span>
-            <ArrowRight size={15} />
+            <Sparkles size={14} className="about-btn-icon" />
+            <span>About MUSE</span>
           </button>
         </div>
 
         <div className="brand-logo-desktop" title="MUSE PC">
-          <div className="brand-dot-badge">
-            <span className="brand-emblem-glyph">M</span>
+          <div className="brand-logo-emblem">
+            <img src="/icons/logo-badge.png" alt="MUSE" className="brand-logo-img" />
           </div>
-          <span className="brand-name">
-            muse<span className="brand-dot">.</span>
-          </span>
-          <span className="brand-tag">PC</span>
+          <div className="brand-logo-text">
+            muse<span className="brand-logo-dot">.</span>
+          </div>
+          <span className="brand-tag">.PC</span>
         </div>
 
         <div className="header-right-meta">
@@ -336,6 +377,14 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
                 ? 'Join MUSE to personalize your sonic vault, save offline tracks, and sync across PC.'
                 : 'Log in to continue listening to your personalized mixes and favorites.'}
             </p>
+
+            {/* Real Internet Offline Warning Banner */}
+            {!isOnline && (
+              <div className="auth-network-warning-pill">
+                <WifiOff size={16} />
+                <span>No internet connection detected. Active internet required to continue.</span>
+              </div>
+            )}
 
             {/* Success Notice Banner */}
             {successNotice && (
@@ -612,6 +661,125 @@ export function OnboardingAuthView({ onAuthSuccess, onSkipToArtists }) {
           </div>
         </section>
       </main>
+
+      {/* About MUSE Modal Card */}
+      {isAboutModalOpen && (
+        <div 
+          className="about-modal-backdrop" 
+          onClick={() => setIsAboutModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div 
+            className="about-modal-card" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="about-card-header">
+              <div className="about-brand-wrap">
+                <div className="brand-logo-desktop">
+                  <div className="brand-logo-emblem">
+                    <img src="/icons/logo-badge.png" alt="MUSE" className="brand-logo-img" />
+                  </div>
+                  <div className="brand-logo-text">
+                    muse<span className="brand-logo-dot">.</span>
+                  </div>
+                  <span className="brand-tag">.PC</span>
+                </div>
+                <p className="about-tagline">High-Fidelity Studio Audio for Desktop</p>
+              </div>
+              <button 
+                type="button" 
+                className="about-close-btn"
+                onClick={() => setIsAboutModalOpen(false)}
+                aria-label="Close About Card"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="about-modal-body">
+              <p className="about-lead-text">
+                MUSE is an advanced desktop sound platform engineered for pure acoustics, seamless streaming, and uninterrupted listening. Powered by our distributed high-speed sound database, MUSE delivers instantaneous access to over 100 million master-quality tracks, synchronized lyrics, and studio sound controls.
+              </p>
+
+              <div className="about-features-grid">
+                <div className="about-feature-item">
+                  <div className="about-feature-icon-badge">
+                    <Disc size={18} />
+                  </div>
+                  <div className="about-feature-content">
+                    <h4 className="about-feature-title">Global Sound Database</h4>
+                    <p className="about-feature-desc">
+                      Instant access to 100M+ tracks, global trending charts, rare studio sessions, and complete discographies with zero audio compromise.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="about-feature-item">
+                  <div className="about-feature-icon-badge">
+                    <Sliders size={18} />
+                  </div>
+                  <div className="about-feature-content">
+                    <h4 className="about-feature-title">10-Band Master Equalizer</h4>
+                    <p className="about-feature-desc">
+                      Precision parametric sound sculpting with customized acoustic profiles, decibel fine-tuning, and dynamic bass & vocal enhancement.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="about-feature-item">
+                  <div className="about-feature-icon-badge">
+                    <Music size={18} />
+                  </div>
+                  <div className="about-feature-content">
+                    <h4 className="about-feature-title">Real-Time Synced Lyrics</h4>
+                    <p className="about-feature-desc">
+                      Ultra-accurate karaoke & syllable-synced lyric engine that follows every note in real time for effortless sing-alongs.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="about-feature-item">
+                  <div className="about-feature-icon-badge">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div className="about-feature-content">
+                    <h4 className="about-feature-title">Persistent Cloud Vault</h4>
+                    <p className="about-feature-desc">
+                      Your favorites, custom playlists, listening queues, and sound profiles stay securely synced to your account across every session.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="about-specs-row">
+                <div className="about-spec-badge">
+                  <span className="spec-label">Edition</span>
+                  <span className="spec-val">Desktop PC</span>
+                </div>
+                <div className="about-spec-badge">
+                  <span className="spec-label">Version</span>
+                  <span className="spec-val">v1.0.0 Stable</span>
+                </div>
+                <div className="about-spec-badge">
+                  <span className="spec-label">Audio Engine</span>
+                  <span className="spec-val">Master Web Audio DSP</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="about-modal-footer">
+              <button 
+                type="button" 
+                className="btn-about-confirm"
+                onClick={() => setIsAboutModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

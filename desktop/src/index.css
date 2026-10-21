@@ -248,15 +248,17 @@ html, body {
   min-width: 200px;
 }
 
-/* User-Requested: Top-Left Skip Button */
+/* User-Requested: Top-Left About Button */
+.btn-about-pill,
 .btn-skip-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 18px;
+  padding: 8px 18px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(0, 0, 0, 0.08);
   color: var(--text-primary);
   font-size: 13px;
@@ -266,19 +268,16 @@ html, body {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
 }
 
+.btn-about-pill:hover,
 .btn-skip-pill:hover {
   background: #FFFFFF;
   border-color: rgba(0, 0, 0, 0.18);
-  transform: translateX(3px);
+  transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
-.btn-skip-pill svg {
-  transition: transform 0.2s ease;
-}
-
-.btn-skip-pill:hover svg {
-  transform: translateX(2px);
+.about-btn-icon {
+  color: #121212;
 }
 
 /* Brand Logo */
@@ -289,51 +288,50 @@ html, body {
   user-select: none;
 }
 
-.brand-dot-badge {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: var(--accent-black);
-  color: #FFFFFF;
+.brand-logo-desktop .brand-logo-emblem {
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+  transition: transform 0.25s ease;
 }
 
-.brand-emblem-glyph {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
+.brand-logo-desktop:hover .brand-logo-emblem {
+  transform: rotate(-6deg) scale(1.06);
 }
 
-.brand-name {
-  font-family: var(--font-display);
+.brand-logo-desktop .brand-logo-text {
+  font-family: 'Syne', var(--font-display);
   font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.8px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
   color: var(--text-primary);
-}
-
-.brand-dot {
-  color: #000000;
+  display: flex;
+  align-items: baseline;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .brand-tag {
   background: rgba(0, 0, 0, 0.07);
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 6px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
 }
 
 .header-right-meta {
   min-width: 200px;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  transition: margin-top 0.2s ease;
 }
 
 .version-pill {
@@ -343,6 +341,7 @@ html, body {
   background: rgba(0, 0, 0, 0.04);
   padding: 5px 12px;
   border-radius: 999px;
+  white-space: nowrap;
 }
 
 /* ==========================================================================
@@ -2535,6 +2534,12 @@ html, body {
 .status-pill {
   padding: 6px 10px;
   gap: 6px;
+  transition: all 0.25s ease;
+}
+
+.status-pill.offline {
+  background: rgba(229, 57, 53, 0.08);
+  border-color: rgba(229, 57, 53, 0.25);
 }
 
 .status-dot {
@@ -2543,6 +2548,35 @@ html, body {
   border-radius: 50%;
   background: #2E7D32;
   box-shadow: 0 0 6px #2E7D32;
+  transition: all 0.25s ease;
+}
+
+.status-dot.offline {
+  background: #E53935;
+  box-shadow: 0 0 6px #E53935;
+}
+
+.wifi-icon.offline {
+  color: #E53935;
+}
+
+.wifi-icon.online {
+  color: var(--text-primary);
+}
+
+.auth-network-warning-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(229, 57, 53, 0.08);
+  border: 1px solid rgba(229, 57, 53, 0.25);
+  color: #D32F2F;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  animation: fadeIn 0.2s ease;
 }
 
 .user-avatar-badge {
@@ -4874,6 +4908,7 @@ html, body {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .dock-nav-tabs {
@@ -4882,6 +4917,7 @@ html, body {
   background: rgba(0, 0, 0, 0.04);
   padding: 3px;
   border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .dock-tab-btn {
@@ -6905,6 +6941,284 @@ html, body {
 .fullscreen-active.is-cursor-hidden,
 .fullscreen-active.is-cursor-hidden * {
   cursor: none !important;
+}
+
+/* ==========================================================================
+   Electron Custom Blended Titlebar & Window Dragging
+   ========================================================================== */
+
+/* Seamless Dragging Regions: Top of Sidebar, Center Stage Header, and Right Dock Header */
+body.is-electron .desktop-top-header,
+body.is-electron .desktop-stage-header,
+body.is-electron .sidebar-brand-wrap,
+body.is-electron .dock-top-header {
+  -webkit-app-region: drag;
+}
+
+/* Ensure all interactive elements remain clickable and fully operational */
+body.is-electron button,
+body.is-electron input,
+body.is-electron select,
+body.is-electron textarea,
+body.is-electron a,
+body.is-electron .btn-nav-arrow,
+body.is-electron .btn-about-pill,
+body.is-electron .brand-logo-desktop,
+body.is-electron .about-modal-card,
+body.is-electron .about-close-btn,
+body.is-electron .btn-about-confirm,
+body.is-electron .header-search-wrap,
+body.is-electron .header-search-input,
+body.is-electron .btn-clear-search,
+body.is-electron .header-meta-pill,
+body.is-electron .header-user-wrapper,
+body.is-electron .header-user-profile,
+body.is-electron .header-user-popover,
+body.is-electron .btn-sidebar-collapse,
+body.is-electron .brand-logo-unit,
+body.is-electron .dock-tab-btn,
+body.is-electron .pill-switch-btn,
+body.is-electron .now-playing-pill-container,
+body.is-electron .song-video-switcher-pill,
+body.is-electron .btn-video-fs-icon,
+body.is-electron .btn-song-fs-exit,
+body.is-electron .yt-search-results-card,
+body.is-electron .dev-view-switcher {
+  -webkit-app-region: no-drag !important;
+}
+
+/* Native Window Controls Overlay Spacing (Minimize, Maximize, Close in Top-Right) */
+/* Right Dock: Position Up Next and tabs cleanly BELOW the 3 window buttons with full 340px width */
+body.is-electron:not(.fullscreen-active) .dock-top-header {
+  padding-top: 44px;
+  padding-right: 14px;
+}
+
+/* When queue dock is closed or no track has played, leave room on center stage header */
+body.is-electron:not(.fullscreen-active) .queue-closed .desktop-stage-header,
+body.is-electron:not(.fullscreen-active) .no-active-player .desktop-stage-header {
+  padding-right: 140px;
+}
+
+/* Now playing stage top pill switcher sits below top bar */
+body.is-electron:not(.fullscreen-active) .now-playing-pill-container {
+  padding-top: 24px;
+}
+
+/* Onboarding / Auth View: Move version pill just a tad lower so it's not covered by the electron window buttons */
+body.is-electron .header-right-meta {
+  margin-top: 24px;
+}
+
+/* ==========================================================================
+   About MUSE Desktop Modal
+   ========================================================================== */
+
+.about-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(18, 18, 18, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: aboutFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aboutFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.about-modal-card {
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.18), 0 2px 10px rgba(0, 0, 0, 0.06);
+  padding: 30px 34px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: aboutScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aboutScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.about-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.about-brand-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.about-tagline {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: -0.2px;
+}
+
+.about-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.about-close-btn:hover {
+  background: rgba(0, 0, 0, 0.09);
+  color: var(--text-primary);
+  transform: rotate(90deg);
+}
+
+.about-lead-text {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.about-features-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.about-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.025);
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  transition: background 0.2s ease;
+}
+
+.about-feature-item:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.about-feature-icon-badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #121212;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.about-feature-content {
+  flex: 1;
+}
+
+.about-feature-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  letter-spacing: -0.2px;
+}
+
+.about-feature-desc {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.about-specs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+.about-spec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 10px;
+  background: #FFFFFF;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.about-spec-badge .spec-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.about-spec-badge .spec-val {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.about-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.btn-about-confirm {
+  padding: 10px 24px;
+  border-radius: 999px;
+  background: #121212;
+  color: #FFFFFF;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.btn-about-confirm:hover {
+  background: #282828;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
 }
 
 

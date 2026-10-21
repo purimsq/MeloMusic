@@ -12,6 +12,7 @@ import {
   Search,
   Sliders,
   Wifi,
+  WifiOff,
   ChevronLeft,
   ChevronRight,
   ListMusic,
@@ -44,6 +45,7 @@ import { authService } from '../services/authService';
 import { youtubeMusicService } from '../services/youtubeMusicService';
 import { playerStore } from '../services/playerStore';
 import { updateService } from '../services/updateService';
+import { networkService } from '../services/networkService';
 import { EqualizerModal } from './EqualizerModal';
 import { YouTubePlayerHost } from './YouTubePlayerHost';
 
@@ -105,6 +107,16 @@ export function MainAppView({ userProfile, onSignOut }) {
 
   // Auto-Update State
   const [updateInfo, setUpdateInfo] = useState(() => updateService.getState());
+
+  // Real Internet Connectivity State (Active Ping Monitor)
+  const [isOnline, setIsOnline] = useState(() => networkService.isOnline);
+
+  useEffect(() => {
+    const unsubscribe = networkService.subscribe(({ isOnline: online }) => {
+      setIsOnline(online);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Live YouTube Feeds
   const [homeFeed, setHomeFeed] = useState({ quickPicks: [], topHits: [], recommendedVideos: [] });
@@ -1491,9 +1503,18 @@ export function MainAppView({ userProfile, onSignOut }) {
                 <span>EQ</span>
               </button>
 
-              <div className="header-meta-pill status-pill" title="Hi-Fi Master Streaming Connected">
-                <Wifi size={14} className="wifi-icon" />
-                <span className="status-dot" />
+              <div 
+                className={`header-meta-pill status-pill ${isOnline ? 'online' : 'offline'}`} 
+                title={isOnline ? "Connected — Online (Hi-Fi Master Stream Active)" : "No Internet Access — Offline (Click to re-test connection)"}
+                onClick={() => networkService.verifyConnection()}
+                style={{ cursor: 'pointer' }}
+              >
+                {isOnline ? (
+                  <Wifi size={14} className="wifi-icon online" />
+                ) : (
+                  <WifiOff size={14} className="wifi-icon offline" />
+                )}
+                <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
               </div>
 
               {/* User Avatar with Profile Popover */}

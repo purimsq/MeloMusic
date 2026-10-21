@@ -104,7 +104,57 @@ class App {
         <div id="equalizer-modal-container"></div>
         <div id="queue-modal-container"></div>
       </div>
+
+      <!-- Desktop PC Visitor Download Companion Card (Visible on Desktop / PC screens) -->
+      <aside id="desktop-download-companion" class="desktop-download-companion">
+        <div class="desktop-card-inner">
+          <div class="desktop-card-badge">
+            <img src="/icons/logo-badge.png" alt="MUSE" class="desktop-badge-img" onerror="this.style.display='none'" />
+            <div class="desktop-brand-title">
+              muse<span class="desktop-brand-dot">.</span><span class="desktop-brand-tag">PC</span>
+            </div>
+          </div>
+          <h3 class="desktop-card-heading">Elevate your listening on Windows</h3>
+          <p class="desktop-card-sub">
+            Experience 10-band master acoustics, real-time synchronized lyrics, ad-free visuals, and native PC performance.
+          </p>
+          <div class="desktop-card-actions">
+            <a 
+              href="https://github.com/purimsq/MeloMusic/releases/latest/download/MUSE-Setup-1.0.0.exe" 
+              class="btn-desktop-download-exe"
+              id="link-download-desktop-exe"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Download MUSE for Windows (.exe installer)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Download for Windows (.exe)</span>
+            </a>
+            <button type="button" class="btn-desktop-dismiss" id="btn-dismiss-desktop-companion">
+              Continue in Web Player
+            </button>
+          </div>
+        </div>
+      </aside>
     `;
+
+    // Dismiss companion card handler
+    const dismissBtn = document.querySelector('#btn-dismiss-desktop-companion');
+    const companionCard = document.querySelector('#desktop-download-companion');
+    if (dismissBtn && companionCard) {
+      dismissBtn.addEventListener('click', () => {
+        companionCard.style.opacity = '0';
+        companionCard.style.transform = 'translateY(10px)';
+        companionCard.style.transition = 'all 0.25s ease';
+        setTimeout(() => {
+          companionCard.style.display = 'none';
+        }, 250);
+      });
+    }
 
     // References
     this.onboardingContainer = document.querySelector('#onboarding-container');

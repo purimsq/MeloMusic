@@ -1,5 +1,6 @@
 // Artist Service for MUSE PC (Curated + Worldwide Search)
 import { CURATED_ARTISTS } from '../data/curatedArtists.js';
+import { resolveApiUrl } from '../config/api.js';
 
 class ArtistService {
   constructor() {
@@ -20,7 +21,7 @@ class ArtistService {
 
     // 1. Primary: Search via backend proxy to Deezer (returns real high-res face portraits)
     try {
-      const res = await fetch(`/api/artist-search?q=${encodeURIComponent(trimmed)}`);
+      const res = await fetch(resolveApiUrl(`/api/artist-search?q=${encodeURIComponent(trimmed)}`));
       if (res.ok) {
         const data = await res.json();
         if (data.artists && data.artists.length > 0) {

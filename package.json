@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "npm --prefix desktop run dev",
+    "dev:electron": "npm --prefix desktop run dev:electron",
     "build": "vite build",
     "preview": "vite preview"
   },
