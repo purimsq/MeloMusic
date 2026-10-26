@@ -15,6 +15,7 @@ export class YouTubeMusicService {
     this.searchCache = new Map();
     this.radioCache = new Map();
     this.artistCache = new Map();
+    this.albumCache = new Map();
   }
 
   /**
@@ -417,11 +418,14 @@ export class YouTubeMusicService {
             const thumbs = card.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
             const cover = thumbs.slice(-1)[0]?.url || profile.banner;
             const videoId = card.navigationEndpoint?.watchEndpoint?.videoId;
+            const browseId =
+              card.navigationEndpoint?.browseEndpoint?.browseId ||
+              card.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
 
             if (titleLower.includes('album')) {
-              profile.albums.push({ id: `alb-${title}`, title, year: subtitle, cover });
+              profile.albums.push({ id: `alb-${title}`, browseId, title, year: subtitle, cover, artist: profile.name });
             } else if (titleLower.includes('single')) {
-              profile.singles.push({ id: `sgl-${title}`, title, year: subtitle, cover });
+              profile.singles.push({ id: `sgl-${title}`, browseId, title, year: subtitle, cover, artist: profile.name });
             } else if (titleLower.includes('video')) {
               profile.videos.push({
                 id: `yt-${videoId || Math.random()}`,
@@ -542,6 +546,123 @@ export class YouTubeMusicService {
       console.warn('Find official video error:', e);
     }
     return track.videoId;
+  }
+
+  /**
+   * Fetches full Album details and tracklist from YouTube Music InnerTube
+   * Supports both browseId (MPREb_...) and fallback search
+   */
+  async getAlbumDetails(albumTitle, artistName = '', browseId = null) {
+    const trimmedTitle = (albumTitle || '').trim();
+    const trimmedArtist = (artistName || '').trim();
+    const cacheKey = (browseId || `${trimmedArtist}_${trimmedTitle}`).toLowerCase();
+
+    if (this.albumCache.has(cacheKey)) {
+      return this.albumCache.get(cacheKey);
+    }
+
+    let albumData = null;
+    let targetBrowseId = browseId;
+
+    // If we don't have browseId, try finding it via search
+    if (!targetBrowseId && trimmedTitle) {
+      try {
+        const q = `${trimmedArtist} ${trimmedTitle} album`.trim();
+        const searchData = await this.postYTMusic('search', { query: q });
+        const card = searchData?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicCardShelfRenderer;
+        const candidate = card?.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId;
+        if (candidate && candidate.startsWith('MPREb_')) {
+          targetBrowseId = candidate;
+        }
+      } catch (err) {
+        console.warn('Album search browseId resolution warning:', err);
+      }
+    }
+
+    if (targetBrowseId) {
+      try {
+        albumData = await this.postYTMusic('browse', { browseId: targetBrowseId });
+      } catch (err) {
+        console.warn('Album browse fetch warning:', err);
+      }
+    }
+
+    const twoCol = albumData?.contents?.twoColumnBrowseResultsRenderer;
+    const header =
+      twoCol?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicResponsiveHeaderRenderer ||
+      albumData?.header?.musicDetailHeaderRenderer;
+    const shelf =
+      twoCol?.secondaryContents?.sectionListRenderer?.contents?.[0]?.musicShelfRenderer ||
+      albumData?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicShelfRenderer;
+
+    const parsedTitle = header?.title?.runs?.[0]?.text || trimmedTitle || 'Album';
+    const subtitleRuns = header?.subtitle?.runs || [];
+    const subtitle = subtitleRuns.map((r) => r.text).join('') || 'Album';
+    const thumbs =
+      header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails ||
+      header?.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails ||
+      [];
+    const cover = thumbs.slice(-1)[0]?.url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80';
+
+    const rawContents = shelf?.contents || [];
+    const tracks = rawContents
+      .map((w, idx) => {
+        const r = w.musicResponsiveListItemRenderer;
+        if (!r) return null;
+        const tTitle = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || `Track ${idx + 1}`;
+        const dur = r.fixedColumns?.[0]?.musicResponsiveListItemFixedColumnRenderer?.text?.runs?.[0]?.text || '3:30';
+        const vid =
+          r.playlistItemData?.videoId ||
+          r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+
+        const parts = dur.split(':').map(Number);
+        const durationSec = parts.length === 2 ? parts[0] * 60 + parts[1] : 210;
+
+        return {
+          id: `yt-${vid || Math.random()}`,
+          videoId: vid,
+          title: tTitle,
+          artist: trimmedArtist || parsedTitle,
+          album: parsedTitle,
+          duration: durationSec,
+          durationFormatted: dur,
+          cover,
+          type: 'Song'
+        };
+      })
+      .filter((t) => t && t.videoId);
+
+    // If browse returned 0 tracks, fallback to high-accuracy search for the album tracks
+    if (tracks.length === 0 && trimmedTitle) {
+      try {
+        const fallbackHits = await this.search(`${trimmedArtist} ${trimmedTitle} full album`);
+        if (fallbackHits && fallbackHits.length > 0) {
+          fallbackHits.forEach((t) => {
+            tracks.push({
+              ...t,
+              album: parsedTitle
+            });
+          });
+        }
+      } catch (err) {
+        console.warn('Album fallback tracks search warning:', err);
+      }
+    }
+
+    const result = {
+      id: targetBrowseId || `alb-${parsedTitle}`,
+      browseId: targetBrowseId,
+      title: parsedTitle,
+      artist: trimmedArtist || 'Artist',
+      subtitle,
+      cover,
+      tracks
+    };
+
+    if (tracks.length > 0) {
+      this.albumCache.set(cacheKey, result);
+    }
+    return result;
   }
 }
 

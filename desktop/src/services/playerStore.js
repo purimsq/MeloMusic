@@ -197,8 +197,8 @@ class PlayerStore {
     const newPl = {
       id: `pl-${Date.now()}`,
       title: trimmedTitle,
-      description: description || 'Created on MUSE Desktop',
-      cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80',
+      description: description || 'Created on MELO Desktop',
+      cover: '',
       createdAt: Date.now(),
       tracks: []
     };
@@ -217,7 +217,7 @@ class PlayerStore {
     // Check duplicate
     if (!pl.tracks.some((t) => t.id === track.id || (t.videoId && t.videoId === track.videoId))) {
       pl.tracks.push(track);
-      if (pl.tracks.length === 1 && track.cover) {
+      if (track.cover && (!pl.cover || pl.cover.includes('unsplash'))) {
         pl.cover = track.cover;
       }
       this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
@@ -233,8 +233,21 @@ class PlayerStore {
     if (!pl) return false;
 
     pl.tracks = pl.tracks.filter((t) => t.id !== trackId && t.videoId !== trackId);
+    if (pl.tracks.length === 0) {
+      pl.cover = '';
+    } else if (pl.tracks[0]?.cover) {
+      pl.cover = pl.tracks[0].cover;
+    }
     this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
     this.notify('playlistsChange', { playlists: this.playlists, updatedPlaylist: pl });
+    this.scheduleCloudSync();
+    return true;
+  }
+
+  deletePlaylist(playlistId) {
+    this.playlists = this.playlists.filter((p) => p.id !== playlistId);
+    this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
+    this.notify('playlistsChange', { playlists: this.playlists });
     this.scheduleCloudSync();
     return true;
   }

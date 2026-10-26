@@ -43,14 +43,12 @@ export function YouTubePlayerHost({
       if (window.YT && window.YT.Player && containerRef.current) {
         if (!playerRef.current) {
           try {
-            const initialVid = videoId || 'M7lc1UVf-VE';
-            currentLoadedVideoIdRef.current = initialVid;
-            playerRef.current = new window.YT.Player(containerRef.current, {
+            currentLoadedVideoIdRef.current = videoId || null;
+            const playerConfig = {
               height: '100%',
               width: '100%',
-              videoId: initialVid,
               playerVars: {
-                autoplay: 1,
+                autoplay: 0, // Never autoplay placeholder on initial launch
                 enablejsapi: 1,
                 controls: 0,
                 disablekb: 1,
@@ -62,6 +60,15 @@ export function YouTubePlayerHost({
                 cc_load_policy: 0,
                 origin: typeof window !== 'undefined' ? window.location.origin : undefined
               },
+            };
+
+            // Only attach initial videoId if the user actually has a valid track loaded
+            if (videoId) {
+              playerConfig.videoId = videoId;
+            }
+
+            playerRef.current = new window.YT.Player(containerRef.current, {
+              ...playerConfig,
               events: {
                 onReady: (event) => {
                   playerRef.current = event.target;

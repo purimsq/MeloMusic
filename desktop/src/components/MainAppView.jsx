@@ -23,6 +23,7 @@ import {
   Sparkles,
   Check,
   Disc,
+  Compass,
   X,
   Menu,
   Clock,
@@ -38,7 +39,10 @@ import {
   Trash2,
   Maximize2,
   Minimize2,
-  RefreshCw
+  RefreshCw,
+  MoreVertical,
+  ListPlus,
+  FolderPlus
 } from 'lucide-react';
 import { CURATED_ARTISTS } from '../data/curatedArtists';
 import { authService } from '../services/authService';
@@ -49,6 +53,70 @@ import { networkService } from '../services/networkService';
 import { EqualizerModal } from './EqualizerModal';
 import { YouTubePlayerHost } from './YouTubePlayerHost';
 import logoBadgeImg from '../assets/logo-badge.png';
+
+function PlaylistCoverArt({ playlist, className = '' }) {
+  if (!playlist) return null;
+  const tracks = playlist.tracks || [];
+
+  if (playlist.isLikedFolder) {
+    return (
+      <div className={`liked-folder-art ${className}`} style={{ width: '100%', height: '100%' }}>
+        <Heart size={36} fill="#FFF" color="#FFF" />
+      </div>
+    );
+  }
+
+  // 4+ songs: 2x2 collage
+  if (tracks.length >= 4) {
+    return (
+      <div className={`playlist-cover-collage ${className}`}>
+        {tracks.slice(0, 4).map((t, idx) => (
+          <img
+            key={`pl-collage-${t.videoId || t.id}-${idx}`}
+            src={t.cover}
+            alt=""
+            className="collage-tile"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // 1 to 3 songs: 1st song cover
+  if (tracks.length >= 1 && tracks[0].cover) {
+    return (
+      <img
+        src={tracks[0].cover}
+        alt={playlist.title}
+        className={`playlist-cover-single ${className}`}
+      />
+    );
+  }
+
+  // 0 songs: Soft & Cool Ceramic Mood Gradient Placeholder
+  const palettes = [
+    { bg: 'linear-gradient(135deg, #A8BBA2 0%, #6E8569 100%)', name: 'Sage' },
+    { bg: 'linear-gradient(135deg, #B8B5C9 0%, #87829F 100%)', name: 'Lavender' },
+    { bg: 'linear-gradient(135deg, #9AB3C5 0%, #5E7A90 100%)', name: 'Slate' },
+    { bg: 'linear-gradient(135deg, #D6C7B7 0%, #A6927E 100%)', name: 'Sand' },
+    { bg: 'linear-gradient(135deg, #CFA393 0%, #A5705E 100%)', name: 'Terracotta' },
+    { bg: 'linear-gradient(135deg, #A7B1AA 0%, #6E7C74 100%)', name: 'Pebble' },
+  ];
+  const charCode = (playlist.title || 'M').charCodeAt(0) || 0;
+  const p = palettes[charCode % palettes.length];
+
+  return (
+    <div
+      className={`playlist-cover-placeholder ${className}`}
+      style={{ background: p.bg }}
+    >
+      <div className="placeholder-ceramic-emboss">
+        <Disc size={26} color="#FFFFFF" strokeWidth={1.8} />
+        <span className="placeholder-letter">{(playlist.title || 'P').charAt(0).toUpperCase()}</span>
+      </div>
+    </div>
+  );
+}
 
 function YoutubeIcon({ size = 20, className = '' }) {
   return (
@@ -157,6 +225,11 @@ export function MainAppView({ userProfile, onSignOut }) {
   const [artistProfile, setArtistProfile] = useState(null);
   const [isArtistLoading, setIsArtistLoading] = useState(false);
 
+  // Album Detail State
+  const [selectedAlbum, setSelectedAlbum] = useState(null);
+  const [albumDetails, setAlbumDetails] = useState(null);
+  const [isAlbumLoading, setIsAlbumLoading] = useState(false);
+
   // Library & Playlists State
   const [likedSongs, setLikedSongs] = useState(playerStore.getLikedSongs());
   const [playlists, setPlaylists] = useState(playerStore.getPlaylists());
@@ -166,7 +239,22 @@ export function MainAppView({ userProfile, onSignOut }) {
   const [isNewPlaylistModalOpen, setIsNewPlaylistModalOpen] = useState(false);
   const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
   const [newPlaylistDesc, setNewPlaylistDesc] = useState('');
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
+  const [playlistTrackSearch, setPlaylistTrackSearch] = useState('');
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
+
+  // Track 3-Dots Context Menu
+  const [trackMenu, setTrackMenu] = useState(null); // { track, x, y }
+
+  // Add to Playlist Modal
+  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState(null);
+  const [modalNewPlTitle, setModalNewPlTitle] = useState('');
+  const [isCreatingInModal, setIsCreatingInModal] = useState(false);
+
+  // In-Playlist Live Search & Add
+  const [playlistAddSearch, setPlaylistAddSearch] = useState('');
+  const [playlistAddResults, setPlaylistAddResults] = useState([]);
+  const [isPlaylistAddSearching, setIsPlaylistAddSearching] = useState(false);
 
   // YouTube-Style Drag & Scrub State for Top Seek Bar
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -527,10 +615,20 @@ export function MainAppView({ userProfile, onSignOut }) {
   useEffect(() => {
     const unsubscribe = playerStore.subscribe((eventType, payload) => {
       if (eventType === 'likedChange') {
-        setLikedSongs(playerStore.getLikedSongs());
+        const updatedLiked = playerStore.getLikedSongs();
+        setLikedSongs(updatedLiked);
         if (payload?.message) showToast(payload.message);
+        setSelectedPlaylist((prev) => {
+          if (!prev || !prev.isLikedFolder) return prev;
+          return { ...prev, tracks: updatedLiked };
+        });
       } else if (eventType === 'playlistsChange') {
-        setPlaylists(playerStore.getPlaylists());
+        const updated = playerStore.getPlaylists();
+        setPlaylists(updated);
+        setSelectedPlaylist((prev) => {
+          if (!prev || prev.isLikedFolder) return prev;
+          return updated.find((p) => p.id === prev.id) || prev;
+        });
       } else if (eventType === 'recentChange') {
         setRecentActivity(playerStore.getRecentActivity());
       }
@@ -671,6 +769,7 @@ export function MainAppView({ userProfile, onSignOut }) {
     setActiveNav(navName);
     if (extraState.selectedArtist !== undefined) setSelectedArtist(extraState.selectedArtist);
     if (extraState.selectedPlaylist !== undefined) setSelectedPlaylist(extraState.selectedPlaylist);
+    if (extraState.selectedAlbum !== undefined) setSelectedAlbum(extraState.selectedAlbum);
   };
 
   const handleNavBack = () => {
@@ -681,6 +780,7 @@ export function MainAppView({ userProfile, onSignOut }) {
       setActiveNav(targetState.nav);
       if (targetState.selectedArtist !== undefined) setSelectedArtist(targetState.selectedArtist);
       if (targetState.selectedPlaylist !== undefined) setSelectedPlaylist(targetState.selectedPlaylist);
+      if (targetState.selectedAlbum !== undefined) setSelectedAlbum(targetState.selectedAlbum);
     }
   };
 
@@ -692,6 +792,7 @@ export function MainAppView({ userProfile, onSignOut }) {
       setActiveNav(targetState.nav);
       if (targetState.selectedArtist !== undefined) setSelectedArtist(targetState.selectedArtist);
       if (targetState.selectedPlaylist !== undefined) setSelectedPlaylist(targetState.selectedPlaylist);
+      if (targetState.selectedAlbum !== undefined) setSelectedAlbum(targetState.selectedAlbum);
     }
   };
 
@@ -708,6 +809,7 @@ export function MainAppView({ userProfile, onSignOut }) {
           setActiveNav(target.nav);
           if (target.selectedArtist !== undefined) setSelectedArtist(target.selectedArtist);
           if (target.selectedPlaylist !== undefined) setSelectedPlaylist(target.selectedPlaylist);
+          if (target.selectedAlbum !== undefined) setSelectedAlbum(target.selectedAlbum);
           return;
         }
       }
@@ -883,6 +985,23 @@ export function MainAppView({ userProfile, onSignOut }) {
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [ytPlayer, homeFeed]);
+
+  // Close modals & context menus on Escape
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        if (addToPlaylistTrack) {
+          setAddToPlaylistTrack(null);
+        } else if (trackMenu) {
+          setTrackMenu(null);
+        } else if (isNewPlaylistModalOpen) {
+          setIsNewPlaylistModalOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [addToPlaylistTrack, trackMenu, isNewPlaylistModalOpen]);
 
   // Skip Next / Prev with Auto-Replenishment on End
   const handleNextTrack = async () => {
@@ -1084,21 +1203,227 @@ export function MainAppView({ userProfile, onSignOut }) {
     }
   };
 
+  // Open Album Detail View
+  const handleOpenAlbum = async (album, artistName = '') => {
+    if (!album) return;
+    const resolvedArtist = artistName || artistProfile?.name || selectedArtist?.name || album.artist || 'Artist';
+    const albumPayload = {
+      ...album,
+      artist: resolvedArtist
+    };
+    setSelectedAlbum(albumPayload);
+    setAlbumDetails(null);
+    navigateTo('album-detail', { selectedAlbum: albumPayload });
+    setIsAlbumLoading(true);
+    try {
+      const details = await youtubeMusicService.getAlbumDetails(album.title, resolvedArtist, album.browseId);
+      setAlbumDetails(details);
+    } catch (err) {
+      console.warn('Album details fetch error:', err);
+    } finally {
+      setIsAlbumLoading(false);
+    }
+  };
+
   // Open Playlist Detail
   const handleOpenPlaylist = (pl) => {
     setSelectedPlaylist(pl);
+    setPlaylistTrackSearch('');
     navigateTo('playlist-detail', { selectedPlaylist: pl });
   };
 
-  // Create Playlist
-  const handleCreatePlaylistSubmit = (e) => {
+  // Create Playlist (with smooth loading state)
+  const handleCreatePlaylistSubmit = async (e) => {
     e.preventDefault();
-    if (!newPlaylistTitle.trim()) return;
-    const pl = playerStore.createPlaylist(newPlaylistTitle, newPlaylistDesc);
-    setIsNewPlaylistModalOpen(false);
-    setNewPlaylistTitle('');
-    setNewPlaylistDesc('');
-    showToast(`Created playlist "${pl.title}"`);
+    if (!newPlaylistTitle.trim() || isCreatingPlaylist) return;
+    setIsCreatingPlaylist(true);
+
+    // Realistic brief loading delay so user sees smooth animated feedback
+    await new Promise((resolve) => setTimeout(resolve, 650));
+
+    try {
+      const pl = playerStore.createPlaylist(newPlaylistTitle, newPlaylistDesc);
+      setIsNewPlaylistModalOpen(false);
+      setNewPlaylistTitle('');
+      setNewPlaylistDesc('');
+      showToast(`Created playlist "${pl.title}"`);
+      handleOpenPlaylist(pl);
+    } catch (err) {
+      console.error('Error creating playlist:', err);
+      showToast('Error creating playlist');
+    } finally {
+      setIsCreatingPlaylist(false);
+    }
+  };
+
+  // Delete Playlist
+  const handleDeletePlaylist = (playlist) => {
+    if (!playlist || playlist.isLikedFolder) return;
+    if (window.confirm(`Are you sure you want to delete "${playlist.title}"?`)) {
+      playerStore.deletePlaylist(playlist.id);
+      showToast(`Deleted playlist "${playlist.title}"`);
+      setSelectedPlaylist(null);
+      navigateTo('library');
+    }
+  };
+
+  // Remove single track from playlist
+  const handleRemoveTrackFromPlaylist = (track) => {
+    if (!selectedPlaylist || selectedPlaylist.isLikedFolder || !track) return;
+    const trackId = track.videoId || track.id;
+    playerStore.removeTrackFromPlaylist(selectedPlaylist.id, trackId);
+    showToast(`Removed "${track.title}" from playlist`);
+  };
+
+  // Format total duration for playlist
+  const formatPlaylistDuration = (tracks) => {
+    if (!tracks || tracks.length === 0) return '0 min';
+    let totalSec = 0;
+    for (const t of tracks) {
+      if (typeof t.duration === 'number' && !isNaN(t.duration)) {
+        totalSec += t.duration;
+      } else if (typeof t.durationFormatted === 'string') {
+        const parts = t.durationFormatted.split(':').map(Number);
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          totalSec += parts[0] * 60 + parts[1];
+        } else if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+          totalSec += parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+      }
+    }
+    if (totalSec === 0) return `${tracks.length} tracks`;
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    if (hours > 0) {
+      return `${hours} hr ${minutes} min`;
+    }
+    return `${minutes} min`;
+  };
+
+  // Play Next: Insert song immediately after current playing track in queue
+  const handlePlayNext = (track) => {
+    if (!track) return;
+    const normalized = {
+      ...track,
+      id: track.id || track.videoId,
+      videoId: track.videoId || track.id,
+      durationFormatted: track.durationFormatted || '3:30'
+    };
+    setQueue((prevQueue) => {
+      const newQ = [...prevQueue];
+      const insertIndex = queueIndex + 1;
+      newQ.splice(insertIndex, 0, normalized);
+      queueRef.current = newQ;
+      persistPlaybackSession(null, currentTrack, newQ, queueIndex);
+      return newQ;
+    });
+    showToast(`Will play next: "${track.title}"`);
+  };
+
+  // Move an existing track inside the active queue to play next after current track
+  const handleMoveQueueTrackToPlayNext = (targetIdx) => {
+    setQueue((prevQueue) => {
+      if (!prevQueue || targetIdx < 0 || targetIdx >= prevQueue.length) return prevQueue;
+      const curIdx = queueIndexRef.current;
+      if (targetIdx === curIdx) {
+        showToast('This track is currently playing');
+        return prevQueue;
+      }
+      if (targetIdx === curIdx + 1) {
+        showToast(`"${prevQueue[targetIdx]?.title || 'Track'}" is already next`);
+        return prevQueue;
+      }
+
+      const newQ = [...prevQueue];
+      const [movedItem] = newQ.splice(targetIdx, 1);
+
+      // If removed item was before current track, curIdx shifts left by 1
+      let adjustedCurIdx = curIdx;
+      if (targetIdx < curIdx) {
+        adjustedCurIdx = curIdx - 1;
+      }
+
+      // Insert immediately after the current playing track
+      const insertIdx = adjustedCurIdx + 1;
+      newQ.splice(insertIdx, 0, movedItem);
+
+      // Update refs and state cleanly
+      setQueueIndex(adjustedCurIdx);
+      queueIndexRef.current = adjustedCurIdx;
+      queueRef.current = newQ;
+      persistPlaybackSession(null, currentTrackRef.current, newQ, adjustedCurIdx);
+      showToast(`Moved "${movedItem.title}" to play next`);
+      return newQ;
+    });
+  };
+
+  // Add to Queue: Append song to the bottom of the active queue
+  const handleAddToQueue = (track) => {
+    if (!track) return;
+    const normalized = {
+      ...track,
+      id: track.id || track.videoId,
+      videoId: track.videoId || track.id,
+      durationFormatted: track.durationFormatted || '3:30'
+    };
+    setQueue((prevQueue) => {
+      const newQ = [...prevQueue, normalized];
+      queueRef.current = newQ;
+      persistPlaybackSession(null, currentTrack, newQ, queueIndex);
+      return newQ;
+    });
+    showToast(`Added to queue: "${track.title}"`);
+  };
+
+  // Open 3-Dots Track Action Menu
+  const handleOpenTrackMenu = (e, track, extra = {}) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 190;
+    const menuHeight = extra?.isQueueItem ? 140 : 180;
+    let x = rect.right - menuWidth;
+    if (x < 10) x = 10;
+    if (x + menuWidth > window.innerWidth - 10) {
+      x = window.innerWidth - menuWidth - 10;
+    }
+    let y = rect.bottom + 6;
+    if (y + menuHeight > window.innerHeight - 80) {
+      y = rect.top - menuHeight - 6;
+    }
+    setTrackMenu({ track, x, y, ...extra });
+  };
+
+  // Create playlist and add track inside modal
+  const handleCreateAndAddInModal = async () => {
+    if (!modalNewPlTitle.trim() || !addToPlaylistTrack) return;
+    setIsCreatingInModal(true);
+    try {
+      const newPl = playerStore.createPlaylist(modalNewPlTitle.trim());
+      playerStore.addTrackToPlaylist(newPl.id, addToPlaylistTrack);
+      showToast(`Created "${newPl.title}" & added track`);
+      setModalNewPlTitle('');
+      setAddToPlaylistTrack(null);
+    } catch (err) {
+      console.warn('Create in modal error:', err);
+    } finally {
+      setIsCreatingInModal(false);
+    }
+  };
+
+  // Live in-playlist YouTube Music Search
+  const handlePlaylistLiveSearch = async () => {
+    const q = playlistAddSearch.trim();
+    if (!q) return;
+    setIsPlaylistAddSearching(true);
+    try {
+      const results = await youtubeMusicService.search(q, 'songs');
+      setPlaylistAddResults(results ? results.slice(0, 10) : []);
+    } catch (err) {
+      console.warn('Playlist live search error:', err);
+      showToast('Search failed. Check network connection.');
+    } finally {
+      setIsPlaylistAddSearching(false);
+    }
   };
 
   // Toggle Like Heart
@@ -1161,96 +1486,99 @@ export function MainAppView({ userProfile, onSignOut }) {
             1. LEFT NAVIGATION SIDEBAR (Collapsible, Transparent Glass)
             ================================================================== */}
         <aside className="desktop-sidebar">
-          {/* Top Brand Bar */}
-          <div className="sidebar-brand-wrap">
-            {!isSidebarCollapsed ? (
-              <>
-                <div
-                  className="brand-logo-unit"
-                  onClick={() => navigateTo('home')}
-                  title="MUSE PC Home"
-                >
-                  <div className="brand-logo-emblem">
-                    <img src={logoBadgeImg} alt="MUSE" className="brand-logo-img" />
+          {/* Fixed Upper Navigation Section */}
+          <div className="sidebar-nav-fixed">
+            {/* Top Brand Bar */}
+            <div className="sidebar-brand-wrap">
+              {!isSidebarCollapsed ? (
+                <>
+                  <div
+                    className="brand-logo-unit"
+                    onClick={() => navigateTo('home')}
+                    title="MUSE PC Home"
+                  >
+                    <div className="brand-logo-emblem">
+                      <img src={logoBadgeImg} alt="MUSE" className="brand-logo-img" />
+                    </div>
+                    <div className="brand-logo-text">
+                      muse<span className="brand-logo-dot">.</span>
+                    </div>
                   </div>
-                  <div className="brand-logo-text">
-                    muse<span className="brand-logo-dot">.</span>
-                  </div>
-                </div>
 
+                  <button
+                    type="button"
+                    className="btn-sidebar-collapse"
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    title="Collapse sidebar"
+                  >
+                    <Menu size={20} />
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
                   className="btn-sidebar-collapse"
-                  onClick={() => setIsSidebarCollapsed(true)}
-                  title="Collapse sidebar"
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  title="Expand sidebar"
                 >
                   <Menu size={20} />
                 </button>
-              </>
-            ) : (
+              )}
+            </div>
+
+            {/* Primary Navigation */}
+            <nav className="sidebar-nav-group">
               <button
                 type="button"
-                className="btn-sidebar-collapse"
-                onClick={() => setIsSidebarCollapsed(false)}
-                title="Expand sidebar"
+                className={`sidebar-nav-item ${activeNav === 'home' ? 'active' : ''}`}
+                onClick={() => navigateTo('home')}
+                title="Home"
               >
-                <Menu size={20} />
+                <Home size={19} className="nav-icon" />
+                {!isSidebarCollapsed && <span>Home</span>}
               </button>
-            )}
+
+              <button
+                type="button"
+                className={`sidebar-nav-item ${activeNav === 'youtube' ? 'active' : ''}`}
+                onClick={() => navigateTo('youtube')}
+                title="YouTube"
+              >
+                <YoutubeIcon size={19} className="nav-icon" />
+                {!isSidebarCollapsed && (
+                  <div className="sidebar-nav-label-wrap">
+                    <span>YouTube</span>
+                    <span className="nav-coming-badge">Coming</span>
+                  </div>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-nav-item ${activeNav === 'library' || activeNav === 'playlist-detail' ? 'active' : ''}`}
+                onClick={() => navigateTo('library')}
+                title="Library"
+              >
+                <Library size={19} className="nav-icon" />
+                {!isSidebarCollapsed && <span>Library</span>}
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-nav-item ${activeNav === 'recent' ? 'active' : ''}`}
+                onClick={() => navigateTo('recent')}
+                title="Recent Activity"
+              >
+                <History size={19} className="nav-icon" />
+                {!isSidebarCollapsed && <span>Recent Activity</span>}
+              </button>
+            </nav>
+
+            <div className="sidebar-divider" />
           </div>
 
-          {/* Primary Navigation */}
-          <nav className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item ${activeNav === 'home' ? 'active' : ''}`}
-              onClick={() => navigateTo('home')}
-              title="Home"
-            >
-              <Home size={19} className="nav-icon" />
-              {!isSidebarCollapsed && <span>Home</span>}
-            </button>
-
-            <button
-              type="button"
-              className={`sidebar-nav-item ${activeNav === 'youtube' ? 'active' : ''}`}
-              onClick={() => navigateTo('youtube')}
-              title="YouTube"
-            >
-              <YoutubeIcon size={19} className="nav-icon" />
-              {!isSidebarCollapsed && (
-                <div className="sidebar-nav-label-wrap">
-                  <span>YouTube</span>
-                  <span className="nav-coming-badge">Coming</span>
-                </div>
-              )}
-            </button>
-
-            <button
-              type="button"
-              className={`sidebar-nav-item ${activeNav === 'library' || activeNav === 'playlist-detail' ? 'active' : ''}`}
-              onClick={() => navigateTo('library')}
-              title="Library"
-            >
-              <Library size={19} className="nav-icon" />
-              {!isSidebarCollapsed && <span>Library</span>}
-            </button>
-
-            <button
-              type="button"
-              className={`sidebar-nav-item ${activeNav === 'recent' ? 'active' : ''}`}
-              onClick={() => navigateTo('recent')}
-              title="Recent Activity"
-            >
-              <History size={19} className="nav-icon" />
-              {!isSidebarCollapsed && <span>Recent Activity</span>}
-            </button>
-          </nav>
-
-          <div className="sidebar-divider" />
-
-          {/* Selected Artists Section (from Taste Profile) */}
-          <div className="sidebar-section-block">
+          {/* Scrollable Artists Section */}
+          <div className="sidebar-artists-scroll">
             <div className="sidebar-section-header">
               {!isSidebarCollapsed ? (
                 <span className="sidebar-section-title">Selected Artists</span>
@@ -1493,6 +1821,14 @@ export function MainAppView({ userProfile, onSignOut }) {
                                     fill={isTrackLiked ? '#E53935' : 'transparent'}
                                     color={isTrackLiked ? '#E53935' : 'var(--text-muted)'}
                                   />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-track-menu"
+                                  onClick={(e) => handleOpenTrackMenu(e, track)}
+                                  title="More options"
+                                >
+                                  <MoreVertical size={15} />
                                 </button>
                               </div>
                             );
@@ -1749,6 +2085,14 @@ export function MainAppView({ userProfile, onSignOut }) {
                               <span className="quick-pick-artist">{track.artist}</span>
                             </div>
                             <span className="quick-pick-duration">{track.durationFormatted || '3:30'}</span>
+                            <button
+                              type="button"
+                              className="btn-track-menu qp-menu-btn"
+                              onClick={(e) => handleOpenTrackMenu(e, track)}
+                              title="More options"
+                            >
+                              <MoreVertical size={14} />
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -1803,7 +2147,17 @@ export function MainAppView({ userProfile, onSignOut }) {
                             </div>
                           </div>
                           <div className="card-info-wrap">
-                            <span className="card-video-title">{track.title}</span>
+                            <div className="card-info-header">
+                              <span className="card-video-title">{track.title}</span>
+                              <button
+                                type="button"
+                                className="btn-track-menu card-top-menu-btn"
+                                onClick={(e) => handleOpenTrackMenu(e, track)}
+                                title="More options"
+                              >
+                                <MoreVertical size={14} />
+                              </button>
+                            </div>
                             <span className="card-artist-name">{track.artist}</span>
                             <span className="card-views-meta">{track.views || 'Official YouTube'}</span>
                           </div>
@@ -2001,6 +2355,10 @@ export function MainAppView({ userProfile, onSignOut }) {
                           try {
                             player.loadVideoById(currentTrackRef.current.videoId, 0);
                             player.playVideo();
+                          } catch {}
+                        } else {
+                          try {
+                            player.pauseVideo();
                           } catch {}
                         }
                       }}
@@ -2279,6 +2637,14 @@ export function MainAppView({ userProfile, onSignOut }) {
                               color={playerStore.isLiked(track.videoId || track.id) ? '#E53935' : 'var(--text-muted)'}
                             />
                           </button>
+                          <button
+                            type="button"
+                            className="btn-track-menu"
+                            onClick={(e) => handleOpenTrackMenu(e, track)}
+                            title="More options"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
                           <span className="song-row-dur">{track.durationFormatted}</span>
                         </div>
                       ))}
@@ -2291,12 +2657,46 @@ export function MainAppView({ userProfile, onSignOut }) {
                       <h2 className="section-main-heading">Albums</h2>
                       <div className="cards-horizontal-shelf">
                         {artistProfile.albums.map((alb) => (
-                          <div key={alb.id} className="horizontal-music-card">
+                          <div
+                            key={alb.id}
+                            className="horizontal-music-card clickable-album-card"
+                            onClick={() => handleOpenAlbum(alb, artistProfile.name)}
+                            title={`Open ${alb.title}`}
+                          >
                             <div className="card-square-art">
                               <img src={alb.cover} alt={alb.title} loading="lazy" />
+                              <div className="card-hover-play">
+                                <Play size={18} fill="#111" />
+                              </div>
                             </div>
                             <span className="card-track-title">{alb.title}</span>
                             <span className="card-track-subtitle">{alb.year}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Singles & EPs Carousel */}
+                  {artistProfile?.singles?.length > 0 && (
+                    <section className="feed-section-block">
+                      <h2 className="section-main-heading">Singles & EPs</h2>
+                      <div className="cards-horizontal-shelf">
+                        {artistProfile.singles.map((sgl) => (
+                          <div
+                            key={sgl.id}
+                            className="horizontal-music-card clickable-album-card"
+                            onClick={() => handleOpenAlbum(sgl, artistProfile.name)}
+                            title={`Open ${sgl.title}`}
+                          >
+                            <div className="card-square-art">
+                              <img src={sgl.cover} alt={sgl.title} loading="lazy" />
+                              <div className="card-hover-play">
+                                <Play size={18} fill="#111" />
+                              </div>
+                            </div>
+                            <span className="card-track-title">{sgl.title}</span>
+                            <span className="card-track-subtitle">{sgl.year}</span>
                           </div>
                         ))}
                       </div>
@@ -2401,7 +2801,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                       onClick={() => handleOpenPlaylist(pl)}
                     >
                       <div className="library-card-art">
-                        <img src={pl.cover} alt={pl.title} loading="lazy" />
+                        <PlaylistCoverArt playlist={pl} />
                         <div className="card-hover-play">
                           <Play size={20} fill="#111" />
                         </div>
@@ -2419,23 +2819,542 @@ export function MainAppView({ userProfile, onSignOut }) {
               PAGE 5: PLAYLIST DETAIL VIEW
               ============================================================== */}
           {activeNav === 'playlist-detail' && selectedPlaylist && (
-            <div className="page-view-stage playlist-detail-stage">
-              <div className="playlist-detail-hero">
-                <div className="playlist-hero-cover">
-                  {selectedPlaylist.isLikedFolder ? (
+            selectedPlaylist.isLikedFolder ? (
+              /* LIKED MUSIC (ORIGINAL CLEAN LAYOUT) */
+              <div className="page-view-stage playlist-detail-stage">
+                <div className="playlist-detail-hero">
+                  <div className="playlist-hero-cover">
                     <div className="liked-folder-art" style={{ width: '100%', height: '100%' }}>
                       <Heart size={64} fill="#FFF" color="#FFF" />
                     </div>
-                  ) : (
-                    <img src={selectedPlaylist.cover} alt={selectedPlaylist.title} />
-                  )}
+                  </div>
+                  <div className="playlist-hero-info">
+                    <span className="playlist-hero-tag">Playlist</span>
+                    <h1 className="playlist-hero-title">{selectedPlaylist.title}</h1>
+                    <p className="playlist-hero-desc">{selectedPlaylist.description}</p>
+                    <span className="playlist-hero-meta">
+                      {selectedPlaylist.tracks?.length || 0} tracks • Auto-synced in LocalStorage
+                    </span>
+                  </div>
+                </div>
+
+                <div className="playlist-action-bar">
+                  <button
+                    type="button"
+                    className="btn-playlist-play-all"
+                    disabled={!selectedPlaylist.tracks || selectedPlaylist.tracks.length === 0}
+                    onClick={() => {
+                      if (selectedPlaylist.tracks?.length > 0) {
+                        handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks);
+                      }
+                    }}
+                  >
+                    <Play size={18} fill="#FFF" />
+                    <span>Play All</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-playlist-shuffle"
+                    disabled={!selectedPlaylist.tracks || selectedPlaylist.tracks.length === 0}
+                    onClick={() => {
+                      if (selectedPlaylist.tracks?.length > 0) {
+                        handleToggleShuffle();
+                        handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks);
+                      }
+                    }}
+                  >
+                    <Shuffle size={16} />
+                    <span>Shuffle</span>
+                  </button>
+                </div>
+
+                {selectedPlaylist.tracks?.length > 0 ? (
+                  <div className="artist-top-songs-table">
+                    {selectedPlaylist.tracks.map((track, idx) => (
+                      <div
+                        key={`pl-track-${track.videoId || track.id}-${idx}`}
+                        className="artist-song-row"
+                        onClick={() => handlePlayTrack(track, true, selectedPlaylist.tracks)}
+                      >
+                        <span className="song-idx">{idx + 1}</span>
+                        <img src={track.cover} alt={track.title} className="song-row-thumb" />
+                        <div className="song-row-info">
+                          <span className="song-row-title">{track.title}</span>
+                          <span className="song-row-album">{track.artist}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-row-like"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleLike(track);
+                          }}
+                        >
+                          <Heart
+                            size={15}
+                            fill={playerStore.isLiked(track.videoId || track.id) ? '#E53935' : 'transparent'}
+                            color={playerStore.isLiked(track.videoId || track.id) ? '#E53935' : 'var(--text-muted)'}
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-track-menu"
+                          onClick={(e) => handleOpenTrackMenu(e, track)}
+                          title="More options"
+                        >
+                          <MoreVertical size={14} />
+                        </button>
+                        <span className="song-row-dur">{track.durationFormatted}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="search-empty-box playlist-empty-box">
+                    <p>This playlist is empty. Search songs or click the heart icon on any track to add it!</p>
+                    <button
+                      type="button"
+                      className="btn-empty-explore"
+                      style={{ background: '#111111', color: '#FFFFFF' }}
+                      onClick={() => navigateTo('home')}
+                    >
+                      <Compass size={16} style={{ marginRight: 6 }} />
+                      <span style={{ color: '#FFFFFF', fontWeight: 700 }}>Explore Music</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* CUSTOM PLAYLIST DETAIL VIEW (COMPACT, CREATIVE, CERAMIC AESTHETIC) */
+              <div className="page-view-stage custom-playlist-stage">
+                {/* COMPACT CERAMIC HERO CARD */}
+                <div className="custom-pl-hero-card">
+                  <div className="custom-pl-cover-wrapper">
+                    <PlaylistCoverArt playlist={selectedPlaylist} />
+                    {selectedPlaylist.tracks?.length > 0 && (
+                      <button
+                        type="button"
+                        className="custom-pl-cover-play"
+                        onClick={() => handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks)}
+                        title="Play all tracks"
+                      >
+                        <Play size={22} fill="#111" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="custom-pl-info-block">
+                    <div className="custom-pl-tag-row">
+                      <span className="custom-pl-pill"><Disc size={13} /> Playlist</span>
+                      <span className="custom-pl-dot">•</span>
+                      <span className="custom-pl-meta-pill">
+                        {selectedPlaylist.tracks?.length || 0} tracks
+                      </span>
+                      <span className="custom-pl-dot">•</span>
+                      <span className="custom-pl-meta-pill">
+                        <Clock size={12} /> {formatPlaylistDuration(selectedPlaylist.tracks)}
+                      </span>
+                      <span className="custom-pl-dot">•</span>
+                      <span className="custom-pl-curator">Curated by <strong>{userName}</strong></span>
+                    </div>
+
+                    <h1 className="custom-pl-title">{selectedPlaylist.title}</h1>
+
+                    {selectedPlaylist.description && (
+                      <p className="custom-pl-desc">{selectedPlaylist.description}</p>
+                    )}
+
+                    <div className="custom-pl-actions-bar">
+                      <button
+                        type="button"
+                        className="btn-cpl-primary"
+                        disabled={!selectedPlaylist.tracks || selectedPlaylist.tracks.length === 0}
+                        onClick={() => {
+                          if (selectedPlaylist.tracks?.length > 0) {
+                            handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks);
+                          }
+                        }}
+                      >
+                        <Play size={16} fill="#FFF" />
+                        <span>Play All</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-cpl-secondary"
+                        disabled={!selectedPlaylist.tracks || selectedPlaylist.tracks.length === 0}
+                        onClick={() => {
+                          if (selectedPlaylist.tracks?.length > 0) {
+                            handleToggleShuffle();
+                            handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks);
+                          }
+                        }}
+                      >
+                        <Shuffle size={15} />
+                        <span>Shuffle</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-cpl-delete"
+                        onClick={() => handleDeletePlaylist(selectedPlaylist)}
+                        title="Delete this playlist"
+                      >
+                        <Trash2 size={15} />
+                        <span>Delete</span>
+                      </button>
+
+                      {selectedPlaylist.tracks?.length > 0 && (
+                        <div className="custom-pl-search-wrap">
+                          <Search size={14} className="custom-pl-search-icon" />
+                          <input
+                            type="text"
+                            placeholder="Filter songs in playlist..."
+                            value={playlistTrackSearch}
+                            onChange={(e) => setPlaylistTrackSearch(e.target.value)}
+                            className="custom-pl-search-input"
+                          />
+                          {playlistTrackSearch && (
+                            <button
+                              type="button"
+                              className="custom-pl-clear-search"
+                              onClick={() => setPlaylistTrackSearch('')}
+                              title="Clear filter"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* TRACKLIST OR CREATIVE EMPTY CURATION STUDIO */}
+                {(() => {
+                  const allTracks = selectedPlaylist.tracks || [];
+                  const filtered = playlistTrackSearch.trim()
+                    ? allTracks.filter((t) =>
+                        (t.title && t.title.toLowerCase().includes(playlistTrackSearch.toLowerCase())) ||
+                        (t.artist && t.artist.toLowerCase().includes(playlistTrackSearch.toLowerCase()))
+                      )
+                    : allTracks;
+
+                  const suggestedTracks = (
+                    homeFeed.quickPicks?.length > 0
+                      ? homeFeed.quickPicks
+                      : homeFeed.topHits?.length > 0
+                        ? homeFeed.topHits
+                        : []
+                  ).slice(0, 6);
+
+                  if (allTracks.length === 0) {
+                    return (
+                      <div className="custom-pl-empty-curation">
+                        <div className="custom-pl-empty-banner">
+                          <div className="custom-pl-empty-badge">
+                            <Music size={26} />
+                          </div>
+                          <div className="custom-pl-empty-body">
+                            <h3 className="custom-pl-empty-title">This mixtape is ready for sound</h3>
+                            <p className="custom-pl-empty-subtitle">
+                              Add tracks from recommendations below, or explore the Melo library to curate your vibe.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-cpl-explore"
+                            style={{ background: '#111111', color: '#FFFFFF' }}
+                            onClick={() => navigateTo('home')}
+                          >
+                            <Compass size={16} />
+                            <span style={{ color: '#FFFFFF', fontWeight: 700 }}>Explore Music</span>
+                          </button>
+                        </div>
+
+                        {suggestedTracks.length > 0 && (
+                          <div className="custom-pl-quick-add-card">
+                            <div className="custom-pl-quick-add-header">
+                              <div className="quick-add-title-cluster">
+                                <Sparkles size={16} className="sparkle-gold" />
+                                <h4>Instant Add Recommendations</h4>
+                              </div>
+                              <span className="quick-add-tip">1-click curate into this playlist</span>
+                            </div>
+                            <div className="custom-pl-quick-add-grid">
+                              {suggestedTracks.map((sTrack, sIdx) => {
+                                const isAlreadyIn = (selectedPlaylist.tracks || []).some(
+                                  (t) => (t.videoId && t.videoId === sTrack.videoId) || (t.id && t.id === sTrack.id)
+                                );
+                                return (
+                                  <div key={`sug-${sTrack.videoId || sTrack.id}-${sIdx}`} className="custom-pl-sug-item">
+                                    <div
+                                      className="custom-pl-sug-thumb-wrap"
+                                      onClick={() => handlePlayTrack(sTrack, true)}
+                                      title="Preview song"
+                                    >
+                                      <img src={sTrack.cover} alt={sTrack.title} className="custom-pl-sug-thumb" />
+                                      <div className="custom-pl-sug-play-overlay">
+                                        <Play size={13} fill="#FFF" />
+                                      </div>
+                                    </div>
+                                    <div className="custom-pl-sug-info">
+                                      <span className="custom-pl-sug-title" title={sTrack.title}>{sTrack.title}</span>
+                                      <span className="custom-pl-sug-artist" title={sTrack.artist}>{sTrack.artist}</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className={`btn-cpl-sug-add ${isAlreadyIn ? 'is-added' : ''}`}
+                                      disabled={isAlreadyIn}
+                                      onClick={() => {
+                                        playerStore.addTrackToPlaylist(selectedPlaylist.id, sTrack);
+                                        showToast(`Added "${sTrack.title}" to ${selectedPlaylist.title}`);
+                                      }}
+                                      title={isAlreadyIn ? 'Already added' : 'Add to playlist'}
+                                    >
+                                      {isAlreadyIn ? <Check size={13} /> : <Plus size={13} />}
+                                      <span>{isAlreadyIn ? 'Added' : 'Add'}</span>
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="custom-pl-search-no-match">
+                        <p>No tracks matching "{playlistTrackSearch}" in this playlist.</p>
+                        <button
+                          type="button"
+                          className="btn-cpl-clear-filter"
+                          onClick={() => setPlaylistTrackSearch('')}
+                        >
+                          Clear Filter
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="custom-pl-table-card">
+                      <div className="custom-pl-table-header">
+                        <span className="cpl-col-idx">#</span>
+                        <span className="cpl-col-title">TITLE</span>
+                        <span className="cpl-col-artist">ARTIST</span>
+                        <span className="cpl-col-time">TIME</span>
+                        <span className="cpl-col-actions">ACTIONS</span>
+                      </div>
+                      <div className="custom-pl-track-list">
+                        {filtered.map((track, idx) => {
+                          const isTrackActive =
+                            (currentTrack?.videoId && currentTrack?.videoId === track.videoId) ||
+                            (currentTrack?.id && currentTrack?.id === track.id);
+                          const isCurrentlyPlaying = isTrackActive && isPlaying;
+
+                          return (
+                            <div
+                              key={`cpl-track-${track.videoId || track.id}-${idx}`}
+                              className={`custom-pl-track-row ${isTrackActive ? 'is-active-row' : ''}`}
+                              onClick={() => handlePlayTrack(track, true, filtered)}
+                            >
+                              <span className="cpl-col-idx">
+                                {isCurrentlyPlaying ? (
+                                  <div className="playing-eq-bars">
+                                    <span className="eq-bar bar-1" />
+                                    <span className="eq-bar bar-2" />
+                                    <span className="eq-bar bar-3" />
+                                  </div>
+                                ) : (
+                                  <span className="cpl-idx-num">{idx + 1}</span>
+                                )}
+                              </span>
+                              <div className="cpl-col-title cpl-title-cell">
+                                <img src={track.cover} alt={track.title} className="cpl-track-thumb" />
+                                <div className="cpl-track-meta">
+                                  <span className={`cpl-track-title ${isTrackActive ? 'active-title' : ''}`}>
+                                    {track.title}
+                                  </span>
+                                  <span className="cpl-track-artist-sub">{track.artist}</span>
+                                </div>
+                              </div>
+                              <div
+                                className="cpl-col-artist cpl-artist-cell"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (track.artist) handleOpenArtistProfile({ name: track.artist });
+                                }}
+                                title={`View artist: ${track.artist}`}
+                              >
+                                <span>{track.artist}</span>
+                              </div>
+                              <span className="cpl-col-time cpl-duration-text">
+                                {track.durationFormatted || '3:30'}
+                              </span>
+                              <div className="cpl-col-actions" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  className="btn-cpl-row-action"
+                                  onClick={() => handleToggleLike(track)}
+                                  title={playerStore.isLiked(track.videoId || track.id) ? 'Unlike' : 'Like'}
+                                >
+                                  <Heart
+                                    size={15}
+                                    fill={playerStore.isLiked(track.videoId || track.id) ? '#E53935' : 'transparent'}
+                                    color={playerStore.isLiked(track.videoId || track.id) ? '#E53935' : 'var(--text-muted)'}
+                                  />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-cpl-row-action"
+                                  onClick={(e) => handleOpenTrackMenu(e, track)}
+                                  title="More options"
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn-cpl-row-action btn-cpl-remove"
+                                  title="Remove from playlist"
+                                  onClick={() => handleRemoveTrackFromPlaylist(track)}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* FIND MORE SONGS FOR THIS PLAYLIST (LIVE YOUTUBE MUSIC SEARCH) */}
+                <div className="custom-pl-live-search-section">
+                  <div className="pl-search-add-header">
+                    <div className="pl-search-add-title-cluster">
+                      <Search size={16} className="pl-search-add-icon" />
+                      <h3>Find more songs for this playlist</h3>
+                    </div>
+                    <span className="pl-search-add-sub">Search YouTube Music catalog to add tracks directly</span>
+                  </div>
+
+                  <div className="pl-search-add-input-bar">
+                    <Search size={15} className="pl-input-search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search songs or artists to add..."
+                      value={playlistAddSearch}
+                      onChange={(e) => setPlaylistAddSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handlePlaylistLiveSearch();
+                      }}
+                      className="pl-search-add-input"
+                    />
+                    {playlistAddSearch && (
+                      <button
+                        type="button"
+                        className="pl-clear-search-btn"
+                        onClick={() => {
+                          setPlaylistAddSearch('');
+                          setPlaylistAddResults([]);
+                        }}
+                        title="Clear search"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-pl-search-submit"
+                      disabled={!playlistAddSearch.trim() || isPlaylistAddSearching}
+                      onClick={handlePlaylistLiveSearch}
+                    >
+                      {isPlaylistAddSearching ? <Loader2 size={13} className="spin-animate" /> : 'Search'}
+                    </button>
+                  </div>
+
+                  {/* Live Search Results */}
+                  {isPlaylistAddSearching ? (
+                    <div className="pl-search-loading">
+                      <div className="ceramic-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                      <span>Searching YouTube Music...</span>
+                    </div>
+                  ) : playlistAddResults.length > 0 ? (
+                    <div className="pl-search-results-list">
+                      {playlistAddResults.map((sTrack, sIdx) => {
+                        const isAlreadyIn = (selectedPlaylist.tracks || []).some(
+                          (t) => (t.videoId && t.videoId === sTrack.videoId) || (t.id && t.id === sTrack.id)
+                        );
+                        return (
+                          <div key={`pl-sr-${sTrack.videoId || sTrack.id}-${sIdx}`} className="pl-search-result-row">
+                            <div
+                              className="pl-sr-thumb-wrap"
+                              onClick={() => handlePlayTrack(sTrack, true)}
+                              title="Preview track"
+                            >
+                              <img src={sTrack.cover} alt={sTrack.title} className="pl-sr-thumb" />
+                              <div className="pl-sr-play-overlay">
+                                <Play size={13} fill="#FFF" />
+                              </div>
+                            </div>
+                            <div className="pl-sr-info">
+                              <span className="pl-sr-title" title={sTrack.title}>{sTrack.title}</span>
+                              <span className="pl-sr-artist" title={sTrack.artist}>{sTrack.artist}</span>
+                            </div>
+                            <span className="pl-sr-dur">{sTrack.durationFormatted || '3:30'}</span>
+                            <button
+                              type="button"
+                              className={`btn-pl-sr-add ${isAlreadyIn ? 'is-added' : ''}`}
+                              disabled={isAlreadyIn}
+                              onClick={() => {
+                                playerStore.addTrackToPlaylist(selectedPlaylist.id, sTrack);
+                                showToast(`Added "${sTrack.title}" to ${selectedPlaylist.title}`);
+                              }}
+                            >
+                              {isAlreadyIn ? <Check size={13} /> : <Plus size={13} />}
+                              <span>{isAlreadyIn ? 'Added' : 'Add'}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )
+          )}
+
+          {/* ==============================================================
+              PAGE: ALBUM DETAIL VIEW (Cover, Metadata, Play All, Tracklist)
+              ============================================================== */}
+          {activeNav === 'album-detail' && selectedAlbum && (
+            <div className="page-view-stage album-detail-stage">
+              <div className="playlist-detail-hero">
+                <div className="playlist-hero-cover album-hero-cover-wrap">
+                  <img
+                    src={albumDetails?.cover || selectedAlbum.cover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80'}
+                    alt={albumDetails?.title || selectedAlbum.title}
+                  />
                 </div>
                 <div className="playlist-hero-info">
-                  <span className="playlist-hero-tag">Playlist</span>
-                  <h1 className="playlist-hero-title">{selectedPlaylist.title}</h1>
-                  <p className="playlist-hero-desc">{selectedPlaylist.description}</p>
+                  <span className="playlist-hero-tag">Album</span>
+                  <h1 className="playlist-hero-title">{albumDetails?.title || selectedAlbum.title}</h1>
+                  <p
+                    className="playlist-hero-desc album-artist-link"
+                    onClick={() => {
+                      const artistName = albumDetails?.artist || selectedAlbum.artist;
+                      if (artistName) handleOpenArtistProfile({ name: artistName });
+                    }}
+                    title={`View artist profile: ${albumDetails?.artist || selectedAlbum.artist}`}
+                  >
+                    {albumDetails?.artist || selectedAlbum.artist}
+                  </p>
                   <span className="playlist-hero-meta">
-                    {selectedPlaylist.tracks?.length || 0} tracks • Auto-synced in LocalStorage
+                    {albumDetails?.tracks ? `${albumDetails.tracks.length} tracks` : 'Fetching tracklist...'} • {albumDetails?.subtitle || selectedAlbum.year || 'Official YouTube Music Album'}
                   </span>
                 </div>
               </div>
@@ -2444,10 +3363,10 @@ export function MainAppView({ userProfile, onSignOut }) {
                 <button
                   type="button"
                   className="btn-playlist-play-all"
-                  disabled={!selectedPlaylist.tracks || selectedPlaylist.tracks.length === 0}
+                  disabled={isAlbumLoading || !albumDetails?.tracks || albumDetails.tracks.length === 0}
                   onClick={() => {
-                    if (selectedPlaylist.tracks?.length > 0) {
-                      handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks);
+                    if (albumDetails?.tracks?.length > 0) {
+                      handlePlayTrack(albumDetails.tracks[0], true, albumDetails.tracks);
                     }
                   }}
                 >
@@ -2457,11 +3376,17 @@ export function MainAppView({ userProfile, onSignOut }) {
                 <button
                   type="button"
                   className="btn-playlist-shuffle"
-                  disabled={!selectedPlaylist.tracks || selectedPlaylist.tracks.length === 0}
+                  disabled={isAlbumLoading || !albumDetails?.tracks || albumDetails.tracks.length === 0}
                   onClick={() => {
-                    if (selectedPlaylist.tracks?.length > 0) {
-                      handleToggleShuffle();
-                      handlePlayTrack(selectedPlaylist.tracks[0], true, selectedPlaylist.tracks);
+                    if (albumDetails?.tracks?.length > 0) {
+                      const current = albumDetails.tracks[0];
+                      const remaining = albumDetails.tracks.slice(1);
+                      for (let i = remaining.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+                      }
+                      const shuffled = [current, ...remaining];
+                      handlePlayTrack(shuffled[0], true, shuffled);
                     }
                   }}
                 >
@@ -2470,16 +3395,21 @@ export function MainAppView({ userProfile, onSignOut }) {
                 </button>
               </div>
 
-              {selectedPlaylist.tracks?.length > 0 ? (
+              {isAlbumLoading ? (
+                <div className="section-loading-box">
+                  <div className="ceramic-spinner" />
+                  <span>Loading full album tracklist from YouTube Music...</span>
+                </div>
+              ) : albumDetails?.tracks?.length > 0 ? (
                 <div className="artist-top-songs-table">
-                  {selectedPlaylist.tracks.map((track, idx) => (
+                  {albumDetails.tracks.map((track, idx) => (
                     <div
-                      key={`pl-track-${track.videoId}-${idx}`}
+                      key={`alb-track-${track.videoId}-${idx}`}
                       className="artist-song-row"
-                      onClick={() => handlePlayTrack(track, true, selectedPlaylist.tracks)}
+                      onClick={() => handlePlayTrack(track, true, albumDetails.tracks)}
                     >
                       <span className="song-idx">{idx + 1}</span>
-                      <img src={track.cover} alt={track.title} className="song-row-thumb" />
+                      <img src={track.cover || albumDetails.cover || selectedAlbum.cover} alt={track.title} className="song-row-thumb" />
                       <div className="song-row-info">
                         <span className="song-row-title">{track.title}</span>
                         <span className="song-row-album">{track.artist}</span>
@@ -2498,13 +3428,21 @@ export function MainAppView({ userProfile, onSignOut }) {
                           color={playerStore.isLiked(track.videoId || track.id) ? '#E53935' : 'var(--text-muted)'}
                         />
                       </button>
+                      <button
+                        type="button"
+                        className="btn-track-menu"
+                        onClick={(e) => handleOpenTrackMenu(e, track)}
+                        title="More options"
+                      >
+                        <MoreVertical size={14} />
+                      </button>
                       <span className="song-row-dur">{track.durationFormatted}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="search-empty-box">
-                  <p>This playlist is empty. Search songs or click the heart icon on any track to add it!</p>
+                  <p>Unable to load tracks for this album. Please try another album or search directly.</p>
                 </div>
               )}
             </div>
@@ -2567,7 +3505,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                     <span>Artist</span>
                     <span>Album</span>
                     <span>Duration</span>
-                    <span style={{ textAlign: 'right' }}>Like</span>
+                    <span style={{ textAlign: 'right', paddingRight: 8 }}>Actions</span>
                   </div>
                   <div className="recent-table-body">
                     {recentActivity.map((track, idx) => {
@@ -2596,21 +3534,31 @@ export function MainAppView({ userProfile, onSignOut }) {
                           <span className="col-album">{track.artist}</span>
                           <span className="col-album">{track.album || 'Official Music'}</span>
                           <span className="col-duration">{track.durationFormatted || '3:30'}</span>
-                          <button
-                            type="button"
-                            className="btn-row-heart"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleLike(track);
-                            }}
-                            title={isTrackLiked ? 'Unlike' : 'Like'}
-                          >
-                            <Heart
-                              size={15}
-                              fill={isTrackLiked ? '#E53935' : 'transparent'}
-                              color={isTrackLiked ? '#E53935' : 'var(--text-muted)'}
-                            />
-                          </button>
+                          <div className="recent-row-actions">
+                            <button
+                              type="button"
+                              className="btn-row-heart"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleLike(track);
+                              }}
+                              title={isTrackLiked ? 'Unlike' : 'Like'}
+                            >
+                              <Heart
+                                size={15}
+                                fill={isTrackLiked ? '#E53935' : 'transparent'}
+                                color={isTrackLiked ? '#E53935' : 'var(--text-muted)'}
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-track-menu"
+                              onClick={(e) => handleOpenTrackMenu(e, track)}
+                              title="More options"
+                            >
+                              <MoreVertical size={14} />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -2735,6 +3683,14 @@ export function MainAppView({ userProfile, onSignOut }) {
                           <span className="queue-track-artist">{track.artist}</span>
                         </div>
                         <span className="queue-track-time">{track.durationFormatted || '3:30'}</span>
+                        <button
+                          type="button"
+                          className="btn-track-menu queue-item-menu-btn"
+                          onClick={(e) => handleOpenTrackMenu(e, track, { isQueueItem: true, qIdx })}
+                          title="Track options"
+                        >
+                          <MoreVertical size={13} />
+                        </button>
                       </div>
                     );
                   })}
@@ -3007,6 +3963,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                   onChange={(e) => setNewPlaylistTitle(e.target.value)}
                   className="playlist-text-input"
                   autoFocus
+                  disabled={isCreatingPlaylist}
                 />
               </div>
               <div className="playlist-input-group" style={{ marginTop: 12 }}>
@@ -3016,6 +3973,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                   value={newPlaylistDesc}
                   onChange={(e) => setNewPlaylistDesc(e.target.value)}
                   className="playlist-text-input playlist-textarea"
+                  disabled={isCreatingPlaylist}
                 />
               </div>
               <div className="playlist-modal-actions">
@@ -3023,11 +3981,23 @@ export function MainAppView({ userProfile, onSignOut }) {
                   type="button"
                   className="btn-playlist-cancel"
                   onClick={() => setIsNewPlaylistModalOpen(false)}
+                  disabled={isCreatingPlaylist}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-playlist-submit">
-                  Create Playlist
+                <button
+                  type="submit"
+                  className={`btn-playlist-submit ${isCreatingPlaylist ? 'is-loading' : ''}`}
+                  disabled={isCreatingPlaylist || !newPlaylistTitle.trim()}
+                >
+                  {isCreatingPlaylist ? (
+                    <span className="btn-loading-flex">
+                      <Loader2 size={15} className="spin-animate" />
+                      <span>Creating...</span>
+                    </span>
+                  ) : (
+                    <span>Create Playlist</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -3040,6 +4010,201 @@ export function MainAppView({ userProfile, onSignOut }) {
         isOpen={isEqualizerOpen}
         onClose={() => setIsEqualizerOpen(false)}
       />
+
+      {/* Global 3-Dots Track Action Menu */}
+      {trackMenu && (
+        <>
+          <div
+            className="track-menu-backdrop"
+            onClick={() => setTrackMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setTrackMenu(null);
+            }}
+          />
+          <div
+            className="track-context-menu"
+            style={{ top: trackMenu.y, left: trackMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="track-menu-item"
+              onClick={() => {
+                if (trackMenu.isQueueItem) {
+                  handleMoveQueueTrackToPlayNext(trackMenu.qIdx);
+                } else {
+                  handlePlayNext(trackMenu.track);
+                }
+                setTrackMenu(null);
+              }}
+            >
+              <ListPlus size={15} />
+              <span>Play Next</span>
+            </button>
+            {!trackMenu.isQueueItem && (
+              <button
+                type="button"
+                className="track-menu-item"
+                onClick={() => {
+                  handleAddToQueue(trackMenu.track);
+                  setTrackMenu(null);
+                }}
+              >
+                <ListMusic size={15} />
+                <span>Add to Queue</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="track-menu-item"
+              onClick={() => {
+                handleToggleLike(trackMenu.track);
+                setTrackMenu(null);
+              }}
+            >
+              <Heart
+                size={15}
+                fill={playerStore.isLiked(trackMenu.track.videoId || trackMenu.track.id) ? '#E53935' : 'transparent'}
+                color={playerStore.isLiked(trackMenu.track.videoId || trackMenu.track.id) ? '#E53935' : 'currentColor'}
+              />
+              <span>
+                {playerStore.isLiked(trackMenu.track.videoId || trackMenu.track.id)
+                  ? 'Remove from Liked'
+                  : 'Add to Liked'}
+              </span>
+            </button>
+            <div className="track-menu-divider" />
+            <button
+              type="button"
+              className="track-menu-item"
+              onClick={() => {
+                setAddToPlaylistTrack(trackMenu.track);
+                setTrackMenu(null);
+              }}
+            >
+              <FolderPlus size={15} />
+              <span>Add to Playlist...</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Add to Playlist Selection Modal */}
+      {addToPlaylistTrack && (
+        <div className="playlist-modal-backdrop" onClick={() => setAddToPlaylistTrack(null)}>
+          <div className="playlist-modal-card add-to-playlist-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="playlist-modal-header">
+              <div className="modal-title-cluster" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="modal-title-icon-badge">
+                  <FolderPlus size={18} />
+                </div>
+                <div>
+                  <h3 className="playlist-modal-title" style={{ margin: 0, fontSize: 18, lineHeight: 1.2 }}>Add to Playlist</h3>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>Choose a playlist or create a new one</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-close-modal"
+                onClick={() => setAddToPlaylistTrack(null)}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Track Info Banner */}
+            <div className="modal-track-preview">
+              <img
+                src={addToPlaylistTrack.cover}
+                alt={addToPlaylistTrack.title}
+                className="modal-preview-thumb"
+              />
+              <div className="modal-preview-info">
+                <span className="modal-preview-title">{addToPlaylistTrack.title}</span>
+                <span className="modal-preview-artist">{addToPlaylistTrack.artist}</span>
+              </div>
+            </div>
+
+            {/* Create & Add Inline */}
+            <div className="modal-create-pl-row">
+              <input
+                type="text"
+                placeholder="New playlist name..."
+                value={modalNewPlTitle}
+                onChange={(e) => setModalNewPlTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateAndAddInModal();
+                }}
+                className="modal-new-pl-input"
+                disabled={isCreatingInModal}
+              />
+              <button
+                type="button"
+                className="btn-modal-create-add"
+                disabled={!modalNewPlTitle.trim() || isCreatingInModal}
+                onClick={handleCreateAndAddInModal}
+              >
+                {isCreatingInModal ? <Loader2 size={13} className="spin-animate" /> : <Plus size={14} />}
+                <span>Create & Add</span>
+              </button>
+            </div>
+
+            {/* Playlists List */}
+            <div className="modal-playlist-scroll">
+              <span className="modal-section-label">Your Playlists</span>
+              {playlists.filter((p) => !p.isLikedFolder).length === 0 ? (
+                <div className="modal-no-playlists">
+                  <p>No playlists yet. Type a title above to create one!</p>
+                </div>
+              ) : (
+                playlists
+                  .filter((p) => !p.isLikedFolder)
+                  .map((pl) => {
+                    const isAlreadyIn = (pl.tracks || []).some(
+                      (t) =>
+                        (t.videoId && t.videoId === addToPlaylistTrack.videoId) ||
+                        (t.id && t.id === addToPlaylistTrack.id)
+                    );
+                    return (
+                      <div
+                        key={`modal-pl-${pl.id}`}
+                        className={`modal-pl-row ${isAlreadyIn ? 'is-in-playlist' : ''}`}
+                        onClick={() => {
+                          if (!isAlreadyIn) {
+                            playerStore.addTrackToPlaylist(pl.id, addToPlaylistTrack);
+                            showToast(`Added "${addToPlaylistTrack.title}" to ${pl.title}`);
+                            setAddToPlaylistTrack(null);
+                          }
+                        }}
+                      >
+                        <div className="modal-pl-art-wrap">
+                          <PlaylistCoverArt playlist={pl} />
+                        </div>
+                        <div className="modal-pl-meta">
+                          <span className="modal-pl-title">{pl.title}</span>
+                          <span className="modal-pl-count">{pl.tracks?.length || 0} tracks</span>
+                        </div>
+                        <div className="modal-pl-action">
+                          {isAlreadyIn ? (
+                            <span className="badge-already-added">
+                              <Check size={13} /> Added
+                            </span>
+                          ) : (
+                            <span className="btn-modal-add-pl">
+                              <Plus size={13} /> Add
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
