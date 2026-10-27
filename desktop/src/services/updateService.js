@@ -3,22 +3,41 @@
 // communicates with Electron's autoUpdater if running in desktop shell,
 // and polls public GitHub Releases API as a seamless fallback.
 
-const CURRENT_VERSION = '1.0.1';
+const CURRENT_VERSION = '1.0.2';
 const GITHUB_REPO = 'purimsq/MeloMusic';
 const SESSION_CHECK_KEY = 'melo_desktop_update_checked_session';
 
 class UpdateService {
   constructor() {
     this.currentVersion = CURRENT_VERSION;
-    this.status = 'idle'; // 'idle' | 'checking' | 'available' | 'downloading' | 'ready'
+    this.status = 'idle'; // 'idle' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'ready'
     this.latestVersion = null;
     this.releaseNotes = '';
     this.downloadProgress = 0;
     this.hasUpdate = false;
+    this.downloadUrl = null;
+    this.htmlUrl = null;
+    this.resetStatusTimeout = null;
     this.listeners = new Set();
+
+    // Query running app version from Electron if available
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.getAppVersion === 'function') {
+      window.electronAPI.getAppVersion().then((ver) => {
+        if (ver) {
+          this.currentVersion = String(ver).replace(/^v/, '').trim();
+          this.notify();
+        }
+      }).catch(() => {});
+    }
 
     // Listen for Electron autoUpdater IPC if running inside Electron wrapper
     if (typeof window !== 'undefined' && window.electronAPI) {
+      if (typeof window.electronAPI.onCheckingForUpdate === 'function') {
+        window.electronAPI.onCheckingForUpdate(() => {
+          this.status = 'checking';
+          this.notify();
+        });
+      }
       if (typeof window.electronAPI.onUpdateAvailable === 'function') {
         window.electronAPI.onUpdateAvailable((info) => {
           this.setUpdateAvailable(info?.version || 'new version', info?.releaseNotes);
@@ -36,6 +55,11 @@ class UpdateService {
           this.status = 'ready';
           this.downloadProgress = 100;
           this.notify();
+        });
+      }
+      if (typeof window.electronAPI.onUpdateError === 'function') {
+        window.electronAPI.onUpdateError((err) => {
+          console.warn('[UpdateService] autoUpdater note:', err);
         });
       }
     }
@@ -64,15 +88,18 @@ class UpdateService {
       hasUpdate: this.hasUpdate,
       version: this.latestVersion,
       notes: this.releaseNotes,
-      progress: this.downloadProgress
+      progress: this.downloadProgress,
+      downloadUrl: this.downloadUrl,
+      htmlUrl: this.htmlUrl
     };
   }
 
-  setUpdateAvailable(version, notes = '') {
+  setUpdateAvailable(version, notes = '', downloadUrl = null) {
     this.hasUpdate = true;
     this.status = 'available';
-    this.latestVersion = version.replace(/^v/, '');
+    this.latestVersion = String(version).replace(/^v/, '').trim();
     this.releaseNotes = notes;
+    if (downloadUrl) this.downloadUrl = downloadUrl;
     this.notify();
   }
 
@@ -98,45 +125,93 @@ class UpdateService {
   }
 
   /**
-   * Check for updates via GitHub Releases API or Electron IPC
+   * Check for updates via public GitHub Releases API and Electron IPC.
+   * Ensures a brief, visible loading delay (~1.1s) for clear visual feedback.
    */
   async checkForUpdates(isUserInitiated = false) {
+    if (this.status === 'checking' || this.status === 'downloading') {
+      return this.hasUpdate;
+    }
+
+    if (this.resetStatusTimeout) {
+      clearTimeout(this.resetStatusTimeout);
+      this.resetStatusTimeout = null;
+    }
+
     this.status = 'checking';
     this.notify();
 
-    // 1. Electron IPC check if available
+    // Ensure user sees the loading state for at least ~1100ms
+    const minDelayPromise = new Promise((resolve) => setTimeout(resolve, 1100));
+
+    let foundNewer = false;
+    let remoteVer = null;
+    let releaseBody = '';
+    let downloadUrl = null;
+    let htmlUrl = `https://github.com/${GITHUB_REPO}/releases/latest`;
+
+    // 1. Check public GitHub Releases API
+    const checkGitHub = async () => {
+      try {
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+          headers: { Accept: 'application/vnd.github.v3+json' },
+          cache: 'no-cache'
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const rawTag = data.tag_name || data.name || '';
+          const cleanTag = String(rawTag).replace(/^v/, '').trim();
+          htmlUrl = data.html_url || htmlUrl;
+
+          const exeAsset = Array.isArray(data.assets)
+            ? data.assets.find((a) => a.name && a.name.toLowerCase().endsWith('.exe'))
+            : null;
+          downloadUrl = exeAsset ? exeAsset.browser_download_url : htmlUrl;
+
+          if (cleanTag && this.isNewer(cleanTag, this.currentVersion)) {
+            foundNewer = true;
+            remoteVer = cleanTag;
+            releaseBody = data.body || '';
+          }
+        }
+      } catch (err) {
+        if (isUserInitiated) console.warn('[UpdateService] GitHub check error:', err);
+      }
+    };
+
+    // 2. Electron IPC check if available
     if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.checkForUpdates === 'function') {
       try {
         window.electronAPI.checkForUpdates();
-        return;
       } catch (e) {
-        console.warn('Electron autoUpdater check error, falling back to GitHub API:', e);
+        console.warn('[UpdateService] Electron autoUpdater check error:', e);
       }
     }
 
-    // 2. Public GitHub Releases API check
-    try {
-      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-        headers: { Accept: 'application/vnd.github.v3+json' }
-      });
+    // Await both GitHub API fetch and minimum visual delay
+    await Promise.allSettled([checkGitHub(), minDelayPromise]);
 
-      if (res.ok) {
-        const data = await res.json();
-        const rawTag = data.tag_name || '';
-        const remoteVersion = rawTag.replace(/^v/, '');
+    if (foundNewer && remoteVer) {
+      this.downloadUrl = downloadUrl;
+      this.htmlUrl = htmlUrl;
+      this.setUpdateAvailable(remoteVer, releaseBody, downloadUrl);
+      return true;
+    } else {
+      // App is up to date (or network gracefully handled)
+      this.hasUpdate = false;
+      this.status = 'up-to-date';
+      this.notify();
 
-        if (this.isNewer(remoteVersion, this.currentVersion)) {
-          this.setUpdateAvailable(remoteVersion, data.body || '');
-          return true;
+      this.resetStatusTimeout = setTimeout(() => {
+        if (this.status === 'up-to-date') {
+          this.status = 'idle';
+          this.notify();
         }
-      }
-    } catch (e) {
-      if (isUserInitiated) console.warn('GitHub update check note:', e);
-    }
+      }, 2500);
 
-    this.status = 'idle';
-    this.notify();
-    return false;
+      return false;
+    }
   }
 
   /**
@@ -144,9 +219,12 @@ class UpdateService {
    */
   isNewer(remote, current) {
     if (!remote || !current) return false;
-    const rParts = remote.split('.').map(Number);
-    const cParts = current.split('.').map(Number);
-    for (let i = 0; i < Math.max(rParts.length, cParts.length); i++) {
+    const cleanR = String(remote).replace(/^v/, '').trim();
+    const cleanC = String(current).replace(/^v/, '').trim();
+    const rParts = cleanR.split('.').map((p) => parseInt(p, 10) || 0);
+    const cParts = cleanC.split('.').map((p) => parseInt(p, 10) || 0);
+    const maxLen = Math.max(rParts.length, cParts.length);
+    for (let i = 0; i < maxLen; i++) {
       const r = rParts[i] || 0;
       const c = cParts[i] || 0;
       if (r > c) return true;
@@ -165,29 +243,27 @@ class UpdateService {
         return;
       }
       if (typeof window.electronAPI.downloadUpdate === 'function') {
-        this.status = 'downloading';
-        this.notify();
-        window.electronAPI.downloadUpdate();
+        try {
+          this.status = 'downloading';
+          this.notify();
+          window.electronAPI.downloadUpdate();
+          return;
+        } catch (e) {
+          console.warn('Electron downloadUpdate error:', e);
+        }
+      }
+      const targetUrl = this.downloadUrl || this.htmlUrl || `https://github.com/${GITHUB_REPO}/releases/latest`;
+      if (typeof window.electronAPI.openExternal === 'function') {
+        window.electronAPI.openExternal(targetUrl);
         return;
       }
     }
 
-    // Smooth demonstration/fallback if running in web preview
-    this.status = 'downloading';
-    this.downloadProgress = 10;
-    this.notify();
-
-    const interval = setInterval(() => {
-      this.downloadProgress += 18;
-      if (this.downloadProgress >= 100) {
-        clearInterval(interval);
-        this.downloadProgress = 100;
-        this.status = 'ready';
-        this.notify();
-      } else {
-        this.notify();
-      }
-    }, 400);
+    // Direct browser opening fallback
+    const targetUrl = this.downloadUrl || this.htmlUrl || `https://github.com/${GITHUB_REPO}/releases/latest`;
+    if (typeof window !== 'undefined') {
+      window.open(targetUrl, '_blank');
+    }
   }
 }
 

@@ -4,11 +4,23 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   platform: process.platform,
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   checkForUpdates: () => ipcRenderer.send('app:check-for-updates'),
   downloadUpdate: () => ipcRenderer.send('app:download-update'),
   quitAndInstall: () => ipcRenderer.send('app:quit-and-install'),
+  openExternal: (url) => ipcRenderer.send('app:open-external', url),
+  onCheckingForUpdate: (callback) => {
+    ipcRenderer.on('app:checking-for-update', (_event) => {
+      if (typeof callback === 'function') callback();
+    });
+  },
   onUpdateAvailable: (callback) => {
     ipcRenderer.on('app:update-available', (_event, info) => {
+      if (typeof callback === 'function') callback(info);
+    });
+  },
+  onUpdateNotAvailable: (callback) => {
+    ipcRenderer.on('app:update-not-available', (_event, info) => {
       if (typeof callback === 'function') callback(info);
     });
   },
@@ -20,6 +32,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloaded: (callback) => {
     ipcRenderer.on('app:update-downloaded', (_event, info) => {
       if (typeof callback === 'function') callback(info);
+    });
+  },
+  onUpdateError: (callback) => {
+    ipcRenderer.on('app:update-error', (_event, err) => {
+      if (typeof callback === 'function') callback(err);
     });
   },
   setTitleBarOverlay: (options) => {

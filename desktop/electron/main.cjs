@@ -177,25 +177,97 @@ function createWindow() {
 }
 
 // IPC Handlers for update checks
-ipcMain.on('app:check-for-updates', (event) => {
-  // If running in development or before electron-updater release config is bundled
+ipcMain.handle('app:get-version', () => app.getVersion());
+
+ipcMain.on('app:open-external', (_event, url) => {
+  if (url && (url.startsWith('http:') || url.startsWith('https:'))) {
+    shell.openExternal(url);
+  }
+});
+
+let autoUpdaterInitialized = false;
+function setupAutoUpdater() {
+  if (autoUpdaterInitialized) return;
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('checking-for-update', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:checking-for-update');
+      }
+    });
+
+    autoUpdater.on('update-available', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-available', info);
+      }
+    });
+
+    autoUpdater.on('update-not-available', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-not-available', info);
+      }
+    });
+
+    autoUpdater.on('download-progress', (progressObj) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:download-progress', progressObj);
+      }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-downloaded', info);
+      }
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.warn('[Electron] autoUpdater event error:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-error', err?.message || String(err));
+      }
+    });
+
+    autoUpdaterInitialized = true;
+  } catch (err) {
+    console.warn('[Electron] electron-updater setup note:', err?.message || err);
+  }
+}
+
+ipcMain.on('app:check-for-updates', () => {
   if (!app.isPackaged) {
     console.log('[Electron] Update check requested in dev mode');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-not-available', { devMode: true });
+    }
     return;
   }
 
+  setupAutoUpdater();
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.warn('[Electron] checkForUpdates catch:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-error', err?.message || String(err));
+      }
+    });
   } catch (err) {
-    console.warn('[Electron] autoUpdater error:', err);
+    console.warn('[Electron] autoUpdater invocation error:', err);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-error', err?.message || String(err));
+    }
   }
 });
 
 ipcMain.on('app:download-update', () => {
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.downloadUpdate();
+    autoUpdater.downloadUpdate().catch((err) => {
+      console.warn('[Electron] downloadUpdate catch:', err);
+    });
   } catch (err) {
     console.warn('[Electron] downloadUpdate error:', err);
   }

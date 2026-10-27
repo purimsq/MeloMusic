@@ -478,11 +478,20 @@ export function MainAppView({ userProfile, onSignOut }) {
 
   // Update Action Handler
   const handleTriggerUpdate = () => {
+    if (updateInfo.status === 'checking' || updateInfo.status === 'downloading') {
+      return;
+    }
     if (updateInfo.hasUpdate) {
       updateService.startDownloadAndInstall();
     } else {
       updateService.checkForUpdates(true).then((hasNew) => {
-        if (!hasNew) showToast('MUSE is up to date (v1.0.0)');
+        if (hasNew) {
+          showToast(`New update available (v${updateService.latestVersion || updateInfo.version || '1.0.2'}) • Click profile to update`);
+        } else {
+          showToast(`MUSE is up to date (v${updateInfo.currentVersion || '1.0.2'})`);
+        }
+      }).catch(() => {
+        showToast(`MUSE is up to date (v${updateInfo.currentVersion || '1.0.2'})`);
       });
     }
   };
@@ -1917,7 +1926,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                     </div>
                     <div className="popover-badge-row">
                       <span className="popover-badge">MUSE Hi-Fi Cloud</span>
-                      <span className="popover-version-tag">v{updateInfo.currentVersion || '1.0.0'}</span>
+                      <span className="popover-version-tag">v{updateInfo.currentVersion || '1.0.2'}</span>
                     </div>
                     <div className="popover-divider" />
                     <div className="popover-actions-list">
@@ -1925,13 +1934,17 @@ export function MainAppView({ userProfile, onSignOut }) {
                         type="button"
                         className={`btn-popover-action btn-popover-update ${updateInfo.hasUpdate ? 'has-update-pending' : ''}`}
                         onClick={handleTriggerUpdate}
-                        disabled={updateInfo.status === 'downloading'}
+                        disabled={updateInfo.status === 'checking' || updateInfo.status === 'downloading'}
                         title={updateInfo.hasUpdate ? `Update to v${updateInfo.version}` : 'Check for Updates'}
                       >
-                        <RefreshCw size={15} className={`update-icon ${updateInfo.status === 'downloading' ? 'animate-spin' : ''}`} />
+                        <RefreshCw size={15} className={`update-icon ${updateInfo.status === 'checking' || updateInfo.status === 'downloading' ? 'animate-spin' : ''}`} />
                         <div className="update-btn-label-group">
                           <span>
-                            {updateInfo.status === 'downloading'
+                            {updateInfo.status === 'checking'
+                              ? 'Checking for updates...'
+                              : updateInfo.status === 'up-to-date'
+                              ? `You're up to date (v${updateInfo.currentVersion || '1.0.2'})`
+                              : updateInfo.status === 'downloading'
                               ? `Downloading ${updateInfo.progress}%`
                               : updateInfo.status === 'ready'
                               ? `Restart & Install (v${updateInfo.version})`
