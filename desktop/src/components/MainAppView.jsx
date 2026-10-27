@@ -486,12 +486,12 @@ export function MainAppView({ userProfile, onSignOut }) {
     } else {
       updateService.checkForUpdates(true).then((hasNew) => {
         if (hasNew) {
-          showToast(`New update available (v${updateService.latestVersion || updateInfo.version || '1.0.2'}) • Click profile to update`);
+          showToast(`New update available (v${updateService.latestVersion || updateInfo.version || '1.0.3'}) • Click profile to update`);
         } else {
-          showToast(`MUSE is up to date (v${updateInfo.currentVersion || '1.0.2'})`);
+          showToast(`MUSE is up to date (v${updateInfo.currentVersion || '1.0.3'})`);
         }
       }).catch(() => {
-        showToast(`MUSE is up to date (v${updateInfo.currentVersion || '1.0.2'})`);
+        showToast(`MUSE is up to date (v${updateInfo.currentVersion || '1.0.3'})`);
       });
     }
   };
@@ -1926,7 +1926,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                     </div>
                     <div className="popover-badge-row">
                       <span className="popover-badge">MUSE Hi-Fi Cloud</span>
-                      <span className="popover-version-tag">v{updateInfo.currentVersion || '1.0.2'}</span>
+                      <span className="popover-version-tag">v{updateInfo.currentVersion || '1.0.3'}</span>
                     </div>
                     <div className="popover-divider" />
                     <div className="popover-actions-list">
@@ -1943,7 +1943,7 @@ export function MainAppView({ userProfile, onSignOut }) {
                             {updateInfo.status === 'checking'
                               ? 'Checking for updates...'
                               : updateInfo.status === 'up-to-date'
-                              ? `You're up to date (v${updateInfo.currentVersion || '1.0.2'})`
+                              ? `You're up to date (v${updateInfo.currentVersion || '1.0.3'})`
                               : updateInfo.status === 'downloading'
                               ? `Downloading ${updateInfo.progress}%`
                               : updateInfo.status === 'ready'

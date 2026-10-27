@@ -3,7 +3,7 @@
 // communicates with Electron's autoUpdater if running in desktop shell,
 // and polls public GitHub Releases API as a seamless fallback.
 
-const CURRENT_VERSION = '1.0.2';
+const CURRENT_VERSION = '1.0.3';
 const GITHUB_REPO = 'purimsq/MeloMusic';
 const SESSION_CHECK_KEY = 'melo_desktop_update_checked_session';
 

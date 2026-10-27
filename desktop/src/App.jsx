@@ -67,37 +67,6 @@ export function App() {
       {/* Global Ambient 3D Sculpted Ceramic Clouds in Background */}
       <AmbientClouds />
 
-      {/* Testing Quick-Switch Menu (floating discreet pill for test preview) */}
-      <div className="dev-view-switcher">
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'main' ? 'active' : ''}`}
-          onClick={() => setCurrentView('main')}
-        >
-          App View
-        </button>
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'auth' ? 'active' : ''}`}
-          onClick={() => setCurrentView('auth')}
-        >
-          Auth Screen
-        </button>
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'artist-select' ? 'active' : ''}`}
-          onClick={() => setCurrentView('artist-select')}
-        >
-          Artist Taste
-        </button>
-        <button
-          type="button"
-          className={`btn-dev-switch ${currentView === 'setup-loading' ? 'active' : ''}`}
-          onClick={() => setCurrentView('setup-loading')}
-        >
-          Curator Setup
-        </button>
-      </div>
 
       {/* Main View Layer */}
       <div className="view-layer-container">
