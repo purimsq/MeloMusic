@@ -5,6 +5,8 @@ const fs = require('fs');
 
 // Ensure Chromium permits media playback without blocking on initial user gesture
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// Enable Windows Hardware Media Key Handling and System Media Transport Controls (SMTC for Seelen UI, Windows flyout, etc.)
+app.commandLine.appendSwitch('enable-features', 'HardwareMediaKeyHandling,MediaSessionService');
 
 let mainWindow = null;
 let localServer = null;
@@ -263,20 +265,27 @@ ipcMain.on('app:check-for-updates', () => {
 });
 
 ipcMain.on('app:download-update', () => {
+  setupAutoUpdater();
   try {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.downloadUpdate().catch((err) => {
       console.warn('[Electron] downloadUpdate catch:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:update-error', err?.message || String(err));
+      }
     });
   } catch (err) {
     console.warn('[Electron] downloadUpdate error:', err);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:update-error', err?.message || String(err));
+    }
   }
 });
 
 ipcMain.on('app:quit-and-install', () => {
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.quitAndInstall();
+    autoUpdater.quitAndInstall(false, true);
   } catch (err) {
     console.warn('[Electron] quitAndInstall error:', err);
   }

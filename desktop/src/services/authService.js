@@ -109,6 +109,7 @@ class AuthService {
       if (this.userProfile) {
         this.userProfile.favoriteArtists = artists;
         this.setUserProfile(this.userProfile);
+        this.notifyListeners(this.userProfile);
       }
       // Sync to Firestore if user is logged in
       const activeUser = this.currentUser || auth?.currentUser;

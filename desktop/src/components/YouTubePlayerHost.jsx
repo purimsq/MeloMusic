@@ -37,6 +37,11 @@ export function YouTubePlayerHost({
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
+
   // Initialize YouTube IFrame API script
   useEffect(() => {
     const checkAndInit = () => {
@@ -101,6 +106,13 @@ export function YouTubePlayerHost({
                   }
                 },
                 onStateChange: (event) => {
+                  if (event.data === 1 && playerRef.current) {
+                    try {
+                      playerRef.current.setVolume(Math.round(volume * 100));
+                      if (isMuted) playerRef.current.mute();
+                      else playerRef.current.unMute();
+                    } catch {}
+                  }
                   if (onStateChangeRef.current) onStateChangeRef.current(event.data, event.target);
                 },
                 onError: (err) => {
@@ -151,6 +163,13 @@ export function YouTubePlayerHost({
           if (onTimeUpdateRef.current) {
             onTimeUpdateRef.current(current, dur);
           }
+          if (typeof playerRef.current.getVolume === 'function') {
+            const curYtVol = playerRef.current.getVolume();
+            const targetVol = Math.round((isMutedRef.current ? 0 : volumeRef.current) * 100);
+            if (!isMutedRef.current && Math.abs(curYtVol - targetVol) > 2) {
+              try { playerRef.current.setVolume(targetVol); } catch {}
+            }
+          }
         } catch {}
       }
     }, 250);
@@ -168,6 +187,9 @@ export function YouTubePlayerHost({
         currentLoadedVideoIdRef.current = videoId;
         try {
           playerRef.current.loadVideoById(videoId, 0);
+          playerRef.current.setVolume(Math.round((isMuted ? 0 : volume) * 100));
+          if (isMuted) playerRef.current.mute();
+          else playerRef.current.unMute();
           if (isPlaying && typeof playerRef.current.playVideo === 'function') {
             playerRef.current.playVideo();
           }

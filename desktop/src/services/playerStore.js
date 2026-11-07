@@ -7,7 +7,8 @@ const STORAGE_KEYS = {
   LIKED: 'melo_desktop_liked_songs',
   PLAYLISTS: 'melo_desktop_playlists',
   RECENT: 'melo_desktop_recent_activity',
-  SETTINGS: 'melo_desktop_player_settings'
+  SETTINGS: 'melo_desktop_player_settings',
+  SEARCH_HISTORY: 'melo_desktop_search_history'
 };
 
 class PlayerStore {
@@ -32,6 +33,8 @@ class PlayerStore {
       }
     ]);
     this.recentActivity = this.load(STORAGE_KEYS.RECENT, []);
+    const savedHistory = this.load(STORAGE_KEYS.SEARCH_HISTORY, []);
+    this.searchHistory = Array.isArray(savedHistory) ? savedHistory.slice(0, 9) : [];
     this.settings = this.load(STORAGE_KEYS.SETTINGS, {
       volume: 0.85,
       isMuted: false,
@@ -78,9 +81,28 @@ class PlayerStore {
     return [...this.likedSongs];
   }
 
-  isLiked(trackId) {
-    if (!trackId) return false;
-    return this.likedSongs.some((t) => t.id === trackId || (t.videoId && t.videoId === trackId));
+  isLiked(trackOrId) {
+    if (!trackOrId) return false;
+    const targetId = typeof trackOrId === 'object'
+      ? (trackOrId.videoId || trackOrId.id)
+      : trackOrId;
+    if (!targetId || typeof targetId !== 'string') return false;
+
+    const cleanTargetId = targetId.startsWith('yt-') ? targetId.replace('yt-', '') : targetId;
+    if (!cleanTargetId) return false;
+
+    return this.likedSongs.some((t) => {
+      const tId = t.id || '';
+      const tVid = t.videoId || '';
+      const cleanTId = typeof tId === 'string' && tId.startsWith('yt-') ? tId.replace('yt-', '') : tId;
+      const cleanTVid = typeof tVid === 'string' && tVid.startsWith('yt-') ? tVid.replace('yt-', '') : tVid;
+      return (
+        (cleanTargetId && cleanTId && cleanTargetId === cleanTId) ||
+        (cleanTargetId && cleanTVid && cleanTargetId === cleanTVid) ||
+        (targetId && tId && targetId === tId) ||
+        (targetId && tVid && targetId === tVid)
+      );
+    });
   }
 
   toggleLike(track) {
@@ -228,6 +250,46 @@ class PlayerStore {
     return false;
   }
 
+  addTracksToPlaylist(playlistId, tracks = []) {
+    const pl = this.playlists.find((p) => p.id === playlistId);
+    if (!pl || !Array.isArray(tracks) || tracks.length === 0) {
+      return { addedCount: 0, skippedCount: 0, playlist: null };
+    }
+
+    if (!Array.isArray(pl.tracks)) {
+      pl.tracks = [];
+    }
+
+    let addedCount = 0;
+    let skippedCount = 0;
+
+    tracks.forEach((track) => {
+      if (!track) return;
+      const isDuplicate = pl.tracks.some(
+        (t) => (t.id && track.id && t.id === track.id) ||
+               (t.videoId && track.videoId && t.videoId === track.videoId)
+      );
+
+      if (!isDuplicate) {
+        pl.tracks.push(track);
+        if (track.cover && (!pl.cover || pl.cover.includes('unsplash'))) {
+          pl.cover = track.cover;
+        }
+        addedCount++;
+      } else {
+        skippedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      this.save(STORAGE_KEYS.PLAYLISTS, this.playlists);
+      this.notify('playlistsChange', { playlists: this.playlists, updatedPlaylist: pl });
+      this.scheduleCloudSync();
+    }
+
+    return { addedCount, skippedCount, playlist: pl };
+  }
+
   removeTrackFromPlaylist(playlistId, trackId) {
     const pl = this.playlists.find((p) => p.id === playlistId);
     if (!pl) return false;
@@ -286,6 +348,37 @@ class PlayerStore {
     this.save(STORAGE_KEYS.RECENT, []);
     this.notify('recentChange', { recentActivity: [] });
     this.scheduleCloudSync();
+  }
+
+  // SEARCH HISTORY (FIFO queue maintaining the 9 most recent unique queries)
+  getSearchHistory() {
+    return Array.isArray(this.searchHistory) ? [...this.searchHistory].slice(0, 9) : [];
+  }
+
+  addSearchHistory(query) {
+    const trimmed = (query || '').trim();
+    if (!trimmed) return;
+    const current = Array.isArray(this.searchHistory) ? this.searchHistory : [];
+    // Remove previous instance so it moves to front (most recent)
+    const filtered = current.filter((item) => item.toLowerCase() !== trimmed.toLowerCase());
+    // FIFO eviction: prepend newest search, keep only the 9 most recent
+    this.searchHistory = [trimmed, ...filtered].slice(0, 9);
+    this.save(STORAGE_KEYS.SEARCH_HISTORY, this.searchHistory);
+    this.notify('searchHistoryChange', { searchHistory: this.searchHistory });
+  }
+
+  removeSearchHistory(query) {
+    const trimmed = (query || '').trim().toLowerCase();
+    const current = Array.isArray(this.searchHistory) ? this.searchHistory : [];
+    this.searchHistory = current.filter((item) => item.toLowerCase() !== trimmed);
+    this.save(STORAGE_KEYS.SEARCH_HISTORY, this.searchHistory);
+    this.notify('searchHistoryChange', { searchHistory: this.searchHistory });
+  }
+
+  clearSearchHistory() {
+    this.searchHistory = [];
+    this.save(STORAGE_KEYS.SEARCH_HISTORY, []);
+    this.notify('searchHistoryChange', { searchHistory: [] });
   }
 
   // SETTINGS

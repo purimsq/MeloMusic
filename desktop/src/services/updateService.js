@@ -3,7 +3,7 @@
 // communicates with Electron's autoUpdater if running in desktop shell,
 // and polls public GitHub Releases API as a seamless fallback.
 
-const CURRENT_VERSION = '1.0.3';
+const CURRENT_VERSION = '1.0.4';
 const GITHUB_REPO = 'purimsq/MeloMusic';
 const SESSION_CHECK_KEY = 'melo_desktop_update_checked_session';
 
@@ -13,7 +13,7 @@ class UpdateService {
     this.status = 'idle'; // 'idle' | 'checking' | 'available' | 'up-to-date' | 'downloading' | 'ready'
     this.latestVersion = null;
     this.releaseNotes = '';
-    this.downloadProgress = 0;
+    this.downloadProgress = '0.00';
     this.hasUpdate = false;
     this.downloadUrl = null;
     this.htmlUrl = null;
@@ -45,21 +45,45 @@ class UpdateService {
       }
       if (typeof window.electronAPI.onDownloadProgress === 'function') {
         window.electronAPI.onDownloadProgress((progressObj) => {
-          this.status = 'downloading';
-          this.downloadProgress = Math.round(progressObj?.percent || 0);
+          const rawPct = progressObj?.percent || 0;
+          if (rawPct >= 99.95) {
+            this.status = 'verifying';
+            this.downloadProgress = '100.00';
+          } else {
+            this.status = 'downloading';
+            this.downloadProgress = rawPct.toFixed(2);
+          }
+          this.resetStallWatchdog();
           this.notify();
         });
       }
       if (typeof window.electronAPI.onUpdateDownloaded === 'function') {
         window.electronAPI.onUpdateDownloaded(() => {
+          if (this.downloadWatchdog) {
+            clearTimeout(this.downloadWatchdog);
+            this.downloadWatchdog = null;
+          }
           this.status = 'ready';
-          this.downloadProgress = 100;
+          this.downloadProgress = '100.00';
           this.notify();
         });
       }
       if (typeof window.electronAPI.onUpdateError === 'function') {
         window.electronAPI.onUpdateError((err) => {
           console.warn('[UpdateService] autoUpdater note:', err);
+          if (this.downloadWatchdog) {
+            clearTimeout(this.downloadWatchdog);
+            this.downloadWatchdog = null;
+          }
+          if (this.status === 'downloading') {
+            this.retryCount = (this.retryCount || 0) + 1;
+            if (this.retryCount >= 2) {
+              this.fallbackToBrowserDownload();
+            } else {
+              this.status = 'error';
+              this.notify();
+            }
+          }
         });
       }
     }
@@ -234,6 +258,39 @@ class UpdateService {
   }
 
   /**
+   * Reset stall watchdog timer to ensure slow but active downloads continue unhindered
+   */
+  resetStallWatchdog() {
+    if (this.downloadWatchdog) clearTimeout(this.downloadWatchdog);
+    this.downloadWatchdog = setTimeout(() => {
+      if (this.status === 'downloading') {
+        console.warn('[UpdateService] Download stalled for 35s - setting error state');
+        this.status = 'error';
+        this.notify();
+      }
+    }, 35000);
+  }
+
+  /**
+   * Fallback to direct external browser download of installer executable
+   */
+  fallbackToBrowserDownload() {
+    if (this.downloadWatchdog) {
+      clearTimeout(this.downloadWatchdog);
+      this.downloadWatchdog = null;
+    }
+    const targetUrl = this.downloadUrl || this.htmlUrl || `https://github.com/${GITHUB_REPO}/releases/latest`;
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+      window.electronAPI.openExternal(targetUrl);
+    } else if (typeof window !== 'undefined') {
+      window.open(targetUrl, '_blank');
+    }
+    this.status = 'available';
+    this.downloadProgress = '0.00';
+    this.notify();
+  }
+
+  /**
    * Download and install the update
    */
   async startDownloadAndInstall() {
@@ -245,25 +302,25 @@ class UpdateService {
       if (typeof window.electronAPI.downloadUpdate === 'function') {
         try {
           this.status = 'downloading';
+          this.downloadProgress = '0.00';
           this.notify();
           window.electronAPI.downloadUpdate();
+
+          // Stall watchdog: if at 0% for 35 seconds with zero packets, offer retry
+          this.resetStallWatchdog();
           return;
         } catch (e) {
           console.warn('Electron downloadUpdate error:', e);
+          this.fallbackToBrowserDownload();
+          return;
         }
       }
-      const targetUrl = this.downloadUrl || this.htmlUrl || `https://github.com/${GITHUB_REPO}/releases/latest`;
-      if (typeof window.electronAPI.openExternal === 'function') {
-        window.electronAPI.openExternal(targetUrl);
-        return;
-      }
+      this.fallbackToBrowserDownload();
+      return;
     }
 
     // Direct browser opening fallback
-    const targetUrl = this.downloadUrl || this.htmlUrl || `https://github.com/${GITHUB_REPO}/releases/latest`;
-    if (typeof window !== 'undefined') {
-      window.open(targetUrl, '_blank');
-    }
+    this.fallbackToBrowserDownload();
   }
 }
 

@@ -67,7 +67,6 @@ export function App() {
       {/* Global Ambient 3D Sculpted Ceramic Clouds in Background */}
       <AmbientClouds />
 
-
       {/* Main View Layer */}
       <div className="view-layer-container">
         {currentView === 'auth' && (

@@ -1,6 +1,6 @@
 {
   "name": "muse-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "MUSE PC — High-Fidelity Desktop Music & Visuals",
   "author": "MUSE Team",
   "repository": {
@@ -15,7 +15,7 @@
     "dev:vite": "vite --port 5174 --host",
     "dev:electron": "electron .",
     "build": "vite build",
-    "dist": "npm run build && electron-builder --win --x64",
+    "dist": "npm run build && npx electron-builder --win --x64",
     "preview": "vite preview"
   },
   "build": {
@@ -52,6 +52,7 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "firebase": "^11.0.0",
     "lucide-react": "^1.16.0",
     "react": "^18.3.1",

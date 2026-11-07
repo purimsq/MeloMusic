@@ -13,6 +13,7 @@ const YT_CLIENT_CONTEXT = {
 export class YouTubeMusicService {
   constructor() {
     this.searchCache = new Map();
+    this.suggestionsCache = new Map();
     this.radioCache = new Map();
     this.artistCache = new Map();
     this.albumCache = new Map();
@@ -194,6 +195,101 @@ export class YouTubeMusicService {
 
     this.searchCache.set(cacheKey, results);
     return results;
+  }
+
+  /**
+   * Fetch YouTube Music query autocomplete suggestions and direct entity matches
+   * Corresponds directly to YouTube Music's live search dropdown suggestions
+   */
+  async getSearchSuggestions(query) {
+    const trimmed = (query || '').trim();
+    if (!trimmed) {
+      return { queries: [], items: [] };
+    }
+
+    const cacheKey = trimmed.toLowerCase();
+    if (this.suggestionsCache && this.suggestionsCache.has(cacheKey)) {
+      return this.suggestionsCache.get(cacheKey);
+    }
+
+    try {
+      const data = await this.postYTMusic('music/get_search_suggestions', { input: trimmed });
+      if (!data) return { queries: [], items: [] };
+
+      const sections = data.contents || [];
+      const queries = [];
+      const items = [];
+
+      // Section 0: Text query autocomplete suggestions
+      const sec0 = sections[0]?.searchSuggestionsSectionRenderer?.contents || [];
+      sec0.forEach((it) => {
+        const r = it.searchSuggestionRenderer || it.historySuggestionRenderer;
+        if (!r) return;
+        const text =
+          r.navigationEndpoint?.searchEndpoint?.query ||
+          r.suggestion?.runs?.map((x) => x.text).join('') ||
+          '';
+        const runs = r.suggestion?.runs || [];
+        if (text && !queries.some((q) => q.text.toLowerCase() === text.toLowerCase())) {
+          queries.push({ text, runs });
+        }
+      });
+
+      // Section 1: Direct entity results (Songs, Videos, Albums)
+      const sec1 = sections[1]?.searchSuggestionsSectionRenderer?.contents || [];
+      sec1.forEach((it) => {
+        const r = it.musicResponsiveListItemRenderer;
+        if (!r) return;
+
+        const f0 = r.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+        const f1 = r.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+
+        const title = f0.map((x) => x.text).join('').trim();
+        const subtitle = f1.map((x) => x.text).join('').trim();
+
+        const videoId =
+          r.navigationEndpoint?.watchEndpoint?.videoId ||
+          r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId ||
+          r.playlistItemData?.videoId ||
+          '';
+
+        const thumbs = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+        const cover = thumbs.length
+          ? thumbs[thumbs.length - 1].url
+          : videoId
+          ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+          : '';
+
+        // Extract metadata parts: type, artist, plays/views
+        const parts = subtitle.split(' • ').map((s) => s.trim());
+        const type = parts[0] || (videoId ? 'Song' : 'Album');
+        const artist = parts[1] || 'Featured Artist';
+        const views = parts[2] || '';
+
+        if (title) {
+          items.push({
+            id: videoId ? `yt-${videoId}` : `item-${title}`,
+            videoId,
+            title,
+            subtitle,
+            type,
+            artist,
+            views,
+            duration: 210,
+            durationFormatted: '3:30',
+            cover
+          });
+        }
+      });
+
+      const result = { queries, items };
+      if (!this.suggestionsCache) this.suggestionsCache = new Map();
+      this.suggestionsCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      console.warn('Error fetching search suggestions:', err);
+      return { queries: [], items: [] };
+    }
   }
 
   /**
@@ -459,22 +555,192 @@ export class YouTubeMusicService {
   }
 
   /**
-   * Fetches Real Curated Home Feed based on user's selected artists
+   * Helper to retrieve and advance the non-repeating spotlight cycle across selected artists
    */
-  async getHomeFeed(selectedArtists = []) {
-    const artistNames = selectedArtists.map((a) => (typeof a === 'string' ? a : a.name)).filter(Boolean);
-    const queryArtist = artistNames.length > 0 ? artistNames[0] : 'Drake';
-    const secondArtist = artistNames.length > 1 ? artistNames[1] : (artistNames[0] || 'The Weeknd');
-    const thirdArtist = artistNames.length > 2 ? artistNames[2] : (artistNames[0] || 'Travis Scott');
+  getNextSpotlightArtist(artistNames) {
+    if (!artistNames || artistNames.length === 0) return null;
+    const STORAGE_KEY = 'melo_spotlight_cycle';
+    let history = [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) history = JSON.parse(stored);
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
 
-    // Parallel fetch real songs from YouTube Music
-    let [quickPicks, topHits, videos] = await Promise.all([
-      this.search(`${queryArtist} popular hits`),
-      this.search(`${secondArtist} top tracks official`),
-      this.search(`${thirdArtist} official music video`)
-    ]);
+    // Keep only artists that are currently in user's selected list (auto-cleans removed artists)
+    history = history.filter((name) => artistNames.includes(name));
 
-    // If initial query returned empty, query general trending music
+    // Find artists who haven't had a spotlight turn yet in this cycle
+    let unvisited = artistNames.filter((name) => !history.includes(name));
+
+    // If all artists have had their turn, reset the cycle!
+    if (unvisited.length === 0) {
+      history = [];
+      unvisited = [...artistNames];
+    }
+
+    // Pick a random artist from unvisited
+    const randomIndex = Math.floor(Math.random() * unvisited.length);
+    const chosen = unvisited[randomIndex] || artistNames[0];
+
+    // Record in history and persist
+    history.push(chosen);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.warn('Failed to save spotlight cycle:', e);
+    }
+
+    return chosen;
+  }
+
+  /**
+   * Helper to retrieve and advance the non-repeating "Today's Focus" cycle across selected artists
+   * Operates independently from the Quick Picks spotlight cycle
+   */
+  getNextFocusArtist(artistNames, excludeArtist = null) {
+    if (!artistNames || artistNames.length === 0) return null;
+    const STORAGE_KEY = 'melo_focus_cycle';
+    let history = [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) history = JSON.parse(stored);
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+
+    history = history.filter((name) => artistNames.includes(name));
+
+    // Prefer artists other than the currently spotlighted artist
+    let candidatePool = artistNames.filter((name) => name !== excludeArtist);
+    if (candidatePool.length === 0) candidatePool = [...artistNames];
+
+    let unvisited = candidatePool.filter((name) => !history.includes(name));
+
+    if (unvisited.length === 0) {
+      history = [];
+      unvisited = [...candidatePool];
+    }
+
+    const randomIndex = Math.floor(Math.random() * unvisited.length);
+    const chosen = unvisited[randomIndex] || candidatePool[0];
+
+    history.push(chosen);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.warn('Failed to save focus cycle:', e);
+    }
+
+    return chosen;
+  }
+
+  /**
+   * Fetches Real Curated Home Feed based on user's selected artists
+   * Features:
+   * 1. Quick Picks: 30% chance Spotlight on {Artist}, 70% Diverse Multi-Artist Blend.
+   * 2. Top Songs & Video Hits: 30% chance "Today's Focus is {Artist}" (independent round-robin system), 70% multi-artist rotation.
+   * 3. Recommended Videos: Rotates across other artists in user's taste DNA.
+   */
+  async getHomeFeed(selectedArtists = [], priorityArtists = []) {
+    const rawNames = selectedArtists.map((a) => (typeof a === 'string' ? a : a?.name)).filter(Boolean);
+    const artistNames = rawNames.length > 0 ? rawNames : ['Drake', 'The Weeknd', 'Billie Eilish', 'Taylor Swift', 'Travis Scott'];
+
+    const priorityNames = (priorityArtists || [])
+      .map((a) => (typeof a === 'string' ? a : a?.name))
+      .filter(Boolean);
+
+    // 70/30 probability: 30% chance for Spotlight Mode on Quick Picks, 70% Diverse Multi-Artist Blend
+    // If priority artists were added, boost spotlight chance to 50% so new artists get immediate recognition
+    const isSpotlightMode = (priorityNames.length > 0 ? Math.random() < 0.50 : Math.random() < 0.30) && artistNames.length > 0;
+    const spotlightArtist = isSpotlightMode
+      ? (priorityNames.length > 0 && Math.random() < 0.65 ? priorityNames[0] : this.getNextSpotlightArtist(artistNames))
+      : null;
+
+    // 70/30 probability: 30% chance for "Today's Focus" on Top Songs & Video Hits (independent system)
+    const isFocusMode = Math.random() < 0.30 && artistNames.length > 0;
+    const focusArtist = isFocusMode ? this.getNextFocusArtist(artistNames, spotlightArtist) : null;
+
+    let quickPicks = [];
+    let topHits = [];
+    let videos = [];
+
+    // Determine artists for Top Hits and Videos:
+    // If focus mode is active, topHits pulls from focusArtist.
+    // Otherwise, pick a rotated artist dynamically from pool (never locked to index 0/1).
+    const remainingForHits = artistNames.filter((name) => name !== spotlightArtist);
+    const shuffledHits = [...remainingForHits].sort(() => Math.random() - 0.5);
+    const topHitArtist = isFocusMode
+      ? focusArtist
+      : (shuffledHits[0] || artistNames[0] || 'The Weeknd');
+
+    // For videos, pick an artist different from both spotlight and focus if possible
+    const remainingForVideos = artistNames.filter((name) => name !== spotlightArtist && name !== topHitArtist);
+    const shuffledVideos = [...remainingForVideos].sort(() => Math.random() - 0.5);
+    const videoArtist = shuffledVideos[0] || remainingForHits[1] || artistNames[1] || artistNames[0] || 'Travis Scott';
+
+    if (isSpotlightMode) {
+      // Fetch Quick Picks for spotlight artist, Top Hits for topHitArtist, and Videos for videoArtist
+      const [qpRes, hitsRes, vidsRes] = await Promise.all([
+        this.search(`${spotlightArtist} popular hits`),
+        this.search(`${topHitArtist} top tracks official`),
+        this.search(`${videoArtist} official music video`)
+      ]);
+      quickPicks = qpRes || [];
+      topHits = hitsRes || [];
+      videos = vidsRes || [];
+    } else {
+      // Mode A: Diverse Multi-Artist Blend for Quick Picks
+      // Guarantee priority (newly added) artists are placed at the front of the blend!
+      const prioritySet = new Set(priorityNames.map((n) => n.toLowerCase()));
+      const priorityInList = artistNames.filter((n) => prioritySet.has(n.toLowerCase()));
+      const otherArtists = artistNames.filter((n) => !prioritySet.has(n.toLowerCase())).sort(() => Math.random() - 0.5);
+      const blendArtists = [...priorityInList, ...otherArtists].slice(0, Math.min(5, artistNames.length));
+
+      const [qpResults, hitsRes, vidsRes] = await Promise.all([
+        Promise.all(blendArtists.map((name) => this.search(`${name} popular hits`))),
+        this.search(`${topHitArtist} top tracks official`),
+        this.search(`${videoArtist} official music video`)
+      ]);
+
+      const combinedPicks = [];
+      const maxPerArtist = 3;
+      for (let i = 0; i < maxPerArtist; i++) {
+        qpResults.forEach((list) => {
+          if (list && list[i]) combinedPicks.push(list[i]);
+        });
+      }
+      qpResults.forEach((list) => {
+        if (list) {
+          list.slice(maxPerArtist).forEach((t) => {
+            if (combinedPicks.length < 24 && !combinedPicks.some((x) => x.videoId === t.videoId)) {
+              combinedPicks.push(t);
+            }
+          });
+        }
+      });
+
+      // If priority artist exists, place their tracks at the front of Quick Picks so user immediately hears them
+      if (priorityInList.length > 0) {
+        const priorityTracks = combinedPicks.filter((t) =>
+          priorityInList.some((pName) => (t.artist || '').toLowerCase().includes(pName.toLowerCase()))
+        );
+        const otherTracks = combinedPicks.filter(
+          (t) => !priorityInList.some((pName) => (t.artist || '').toLowerCase().includes(pName.toLowerCase()))
+        ).sort(() => Math.random() - 0.5);
+        quickPicks = [...priorityTracks, ...otherTracks];
+      } else {
+        quickPicks = combinedPicks.sort(() => Math.random() - 0.5);
+      }
+
+      topHits = hitsRes || [];
+      videos = vidsRes || [];
+    }
+
+    // Fallback if initial queries returned empty
     if (!quickPicks || quickPicks.length === 0) {
       quickPicks = await this.search('top global billboard hits');
     }
@@ -486,9 +752,13 @@ export class YouTubeMusicService {
     }
 
     return {
-      quickPicks: (quickPicks || []).slice(0, 15),
-      topHits: (topHits || []).slice(0, 15),
-      recommendedVideos: (videos || []).slice(0, 10)
+      quickPicks: (quickPicks || []).slice(0, 16),
+      topHits: (topHits || []).slice(0, 16),
+      recommendedVideos: (videos || []).slice(0, 10),
+      isSpotlight: Boolean(isSpotlightMode),
+      spotlightArtist: isSpotlightMode ? spotlightArtist : null,
+      isFocus: Boolean(isFocusMode),
+      focusArtist: isFocusMode ? focusArtist : null
     };
   }
 
